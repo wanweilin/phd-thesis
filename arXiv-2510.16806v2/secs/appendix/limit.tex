@@ -1,0 +1,3 @@
+\section{Limitations and Future Work}
+\label{appendix:limitation}
+Similar to existing methods, our approach is based on standard training methodologies, but in the industry, large language models incorporate numerous engineering optimizations. Consequently, our budget is likely proportional to theirs, rather than perfectly aligned. For instance, in sparse mixture of experts (MoE), the budget is determined by model capacity and routing complexity, whereas we measure performance by the number of forward passes. This measurement may not fully correspond with the budget metrics used in industry. However, we firmly believe that our methods are applicable in industrial contexts; we simply need to adjust the budget measurements accordingly.

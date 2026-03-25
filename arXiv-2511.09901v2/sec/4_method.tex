@@ -1,0 +1,101 @@
+\section{The Proposed Training Mechanism} 
+In this section, we propose SWaST to further investigate and exploit the interplay above to establish a synergistic effect between weights pruning and coreset selection.
+
+\subsection{A Synergistic Optimization Mechanism}
+\label{sec:3-1}
+SWaST consists of a warm-up phase and an alternating optimization phase (shown in Fig.~\ref{fig:mechanism}). 
+In the warm-up phase, the network is trained on the full dataset for \(\mathcal{K}\) epochs to establish a good initialization. 
+The subsequent phase alternatively performs weight pruning and coreset selection, where coreset selection is performed every \(\mathcal{R}\) epochs to identify representative samples,
+followed by network training on the selected samples with pruning operations. This alternating process effectively removes redundant samples and parameters while maintaining model performance. The detailed procedure is outlined in Algorithm~\ref{alg:mechanism}.
+We propose two variants that use different pruning strategies: 
+\begin{itemize}
+    \item[(i)] \textbf{SWaST-trim} prunes only the FC layer, retaining most parameters to ensure training stability. The improved efficiency is mainly attributed to coreset selection.
+    \item[(ii)] \textbf{SWaST-cut} prunes the entire network to achieve more aggressive efficiency gains, but may lead to training instability (which we refer to as the \textbf{“double-loss problem"}). We develop the state preservation mechanism to mitigate this issue in the following section.
+\end{itemize}
+
+\begin{algorithm}[!h]  
+\caption{SWaST}  
+\label{alg:mechanism}  
+\begin{algorithmic}[1]  
+\Require  Dataset $\mathcal{D}$, warm-up epochs $\mathcal{K}$, epoch interval $\mathcal{R}$ for coreset selection, coreset to full set ratio $\alpha$, pruning algorithm $\mathcal{P}$, coreset selection algorithm $\mathcal{S}$, state preservation weight $\lambda$, use state preservation flag $use\_SP$.  
+\Ensure Trained network parameters $\boldsymbol{\theta}$  
+
+\State Initialize network parameters $\boldsymbol{\theta}$  
+\State Set $\mathcal{X} = \mathcal{D}$  
+\State Initialize stored logits $\tilde{\mathcal{D}} = \{\}$  
+\For{$t = 1, 2, \ldots, T$}  
+    \If{$t > \mathcal{K}$ and $t \mod \mathcal{R} = 0$}  
+        \State $\mathcal{X} \gets \mathcal{S}(\mathcal{D}, \boldsymbol{\theta}, \alpha)$ \Comment{Execute coreset selection}
+        \If{$use\_SP$}
+            \State $\tilde{\mathcal{D}} \gets \{(\mathbf{x}_i, \mathbf{z}_i):
+\mathbf{z}_i = f_{\boldsymbol{\theta}_{\textit{pre}}}(\mathbf{x}_i),  \mathbf{x}_i \in \mathcal{X} \}$
+        \EndIf
+    \EndIf  
+    \For{each training iteration}  
+        \State Sample mini-batch $\mathcal{B}$ from coreset $\mathcal{X}$  
+        \State Compute cross-entropy loss $\mathcal{L}_{CE}$  
+        \If{$\mathbf{Z}$ is not empty}  
+            \State Compute $\mathcal{L}_{SP}$ using $\tilde{\mathcal{D}}$   
+            \State $\mathcal{L}_{\text{total}} = \mathcal{L}_{CE} + \lambda\mathcal{L}_{SP}$ \Comment{SWaST-cut} 
+        \Else  
+            \State $\mathcal{L}_{\text{total}} = \mathcal{L}_{CE}$ \Comment{SWaST-trim} 
+        \EndIf  
+        \State Compute gradients $\nabla_{\boldsymbol{\theta}} \mathcal{L}_{\text{total}}$   
+        \State $\boldsymbol{\theta} \gets \mathcal{P}(\boldsymbol{\theta}, \nabla_{\boldsymbol{\theta}} \mathcal{L}_{\text{total}})$ \Comment{Execute pruning step}   
+        \State Update parameters $\boldsymbol{\theta}$ using gradient descent  
+    \EndFor  
+\EndFor  
+\State \Return $\boldsymbol{\theta}$  
+\end{algorithmic}  
+\end{algorithm}
+
+\begin{remark}
+    SWaST maintains generality by supporting any pruning algorithm and coreset selection method that can be integrated into the training process. 
+    \begin{itemize}
+        \item For pruning, the only requirement is that the method should be capable of operating in an online manner, updating the network structure during training rather than requiring separate pre-training or post-processing steps.
+        \item For coreset selection, any method that evaluates and selects samples based on the current model is compatible.
+    \end{itemize} 
+    This flexibility allows practitioners to select the most suitable pruning and coreset selection approaches for their specific needs while still benefiting from SWaST's synergistic optimization between pruning and coreset selection.
+\end{remark}
+
+\subsection{Double-loss Problem: Analysis and Mitigation}
+We begin by establishing two baseline observations:
+\begin{itemize}
+    \item For pruning only scenarios, when a parameter is incorrectly pruned, it can be recovered through learning from appropriate training samples in the next iteration.
+    \item Similarly, for coreset only scenarios, when a training sample is mistakenly excluded, the knowledge preserved in the network parameters can help reidentify and select this sample in the next round.
+\end{itemize}
+
+However, when performing weight pruning and sample tailoring simultaneously, we may encounter situations in which both a parameter and its corresponding supportive training samples are eliminated together. In such cases, standard training procedures struggle to recover from this information loss, as neither component remains available to assist in the recovery process. We term this the “double-loss" problem. Fig.~\ref{fig:double-loss} illustrates this phenomenon through a representative pair of interrelated data and parameters.
+
+\begin{remark}
+    Fig.~\ref{fig:double-loss} offers an intuitive illustration of the double-loss phenomenon, rather than experimental or theoretical validation. It depicts how losing interconnected parameters and samples can impede training recovery. The actual parameter-sample interactions in neural networks occur in higher dimensions with greater complexity.
+\end{remark}
+
+\begin{remark}  
+    It is important to note that the critical double-loss phenomenon is unique to deep learning. Classical machine learning models leverage theoretical tools like KKT conditions ~\cite{shibagaki2016simultaneous} for safe feature/sample removal. In contrast, deep models' highly non-convex loss function prevent such guarantees, necessitating dynamic stabilization mechanisms, which is developed below. 
+\end{remark}
+
+To address this challenge while maintaining optimization stability, we propose \textbf{a state preservation mechanism} that operates through two alternating phases:
+
+\textbf{Stage 1: State recording} (executed every $\mathcal{R}$ epochs). Following each coreset update, we capture the model's states via full forward propagation, i.e.,  
+$$\tilde{\mathcal{D}}=\{(\mathbf{x}_i, \mathbf{z}_i):
+\mathbf{z}_i = f_{\boldsymbol{\theta}_{\textit{pre}}}(\mathbf{x}_i),  \mathbf{x}_i \in \mathcal{X}  \}.$$  
+These preserved states encode critical information about the current model and data subset, including both explicit prediction patterns and feature correlations.  
+
+\textbf{Stage 2: State-constrained training}. During subsequent parameter updates, we enforce state consistency through the composite loss:  
+\begin{equation}
+    \label{eq:loss}
+    \mathcal{L}_{\text{total}} = \mathcal{L}_{\text{CE}} + \lambda\!\!\!\!\!\sum_{(\mathbf{x}_i,\mathbf{z}_i ) \in \tilde{\mathcal{D}}}\!\!\!\!\!\text{KL}(\sigma(\mathbf{z}_i) \| \sigma(f_{\boldsymbol{\theta}}(\mathbf{x}_i))), 
+\end{equation}   
+where $\lambda$ (default 0.1) balances the primary learning objective with state consistency, $\sigma$ denotes the softmax function, and KL represents the Kullback-Leibler divergence.
+Note that the KL terms in Eq.(\ref{eq:loss}) imply that we utilize all samples in \(\mathcal{X}\), as even misclassified examples provide valuable information about the model’s optimization trajectory.  
+
+The mechanism above directly addresses the “double-loss” problem with the following capabilities:
+\begin{itemize}
+    \item KL terms can correct mistakes from previous pruning steps. If a critical parameter is erroneously pruned, the KL term can detect this error in subsequent steps—since the KL divergence relative to the preserved state \(\mathbf{z}_i\) will increase—and re-select that parameter. 
+    \item The KL terms help mitigate training instability caused by pruning. Mistakenly removing important parameters can lead to large fluctuations in \(\sigma(\mathbf{z}_i)\) and destabilize training. Such fluctuations are detected by the KL term, which measures distributional divergence across all classes, whereas \(\mathcal{L}_{\mathrm{CE}}\) only penalizes the ground-truth class.
+\end{itemize}
+
+
+
+

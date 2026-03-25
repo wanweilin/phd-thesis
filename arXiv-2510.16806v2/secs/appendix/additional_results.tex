@@ -1,0 +1,23 @@
+\section{Additional experimental results}
+\label{appendix:additional-results}
+\paragraph{Additional result on MNIST}
+The purpose of this experiment is to investigate the effect of compute budget on data selection within the MNIST dataset. We vary the compute budget in terms of total forward counts (10 000, 20 000, 50 000 and 100 000). At each budget we compare four sampling strategies—random, PBCS, CADS-E and our Bilevel-CADS.
+As shown in Table~\ref{tab:mnist_vary_budget}, our Bilevel-CADS consistently outperforms all baselines in all compute budgets.
+\begin{table}[!htbp]
+  \centering
+  \caption{Results on MNIST with various compute budgets.}
+  \label{tab:mnist_vary_budget}
+  \resizebox{0.6\linewidth}{!}{%
+    \begin{tabular}{@{}lccccc@{}}
+      \toprule
+      \multirow{2}{*}{Method} & \multicolumn{4}{c}{Compute budget} & \multirow{2}{*}{Average} \\
+      \cmidrule(lr){2-5}
+                              & 10,000 & 20,000 & 50,000 & 100,000 & \\
+      \midrule
+        Random                  & 87.36          & 88.05          & 87.71          & 87.24          & 87.59                    \\
+      PBCS                    & 89.61          & 90.48          &  90.96    & 90.41    & 90.37                    \\
+      CADS-E                  & {\ul 90.62}    & {\ul 91.48}    & {\ul 92.45}          & {\ul 93.17}          & {\ul 91.93}              \\
+      Bilevel-CADS            & \textbf{90.70} & \textbf{92.44} & \textbf{93.09} & \textbf{93.61} & \textbf{92.46}           \\ \bottomrule
+    \end{tabular}%
+  }
+\end{table} 

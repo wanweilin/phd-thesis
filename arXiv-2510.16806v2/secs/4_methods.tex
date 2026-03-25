@@ -1,0 +1,205 @@
+\section{Methods}  
+\label{sec:methods}
+
+This section introduces \textbf{Compute‑Aware Data Selection (CADS)}, a single objective that jointly optimizes (i) model parameters and (ii) both \textit{how much} and \textit{which} data to process under a fixed compute budget.  
+We first formalise compute‑constrained selection as a bilevel optimization problem and review a direct policy‑gradient baseline.  
+The remainder of the section presents two CADS variants: CADS-E, operating at the example level, and CADS-S, operating at the source level.
+
+\subsection{Compute-constrained data selection}
+To address the limitations of traditional data selection methods, we redefine the problem with the computational budget as an explicit constraint. Given a fixed compute limit \(C\), we aim to identify a subset of data—along with its size—that maximizes validation accuracy while ensuring that the total number of sample-processing steps does not exceed \(C\). This can be formalized as the following bilevel optimization problem:
+\begin{equation}  
+\label{eq:bilevel-m}
+\begin{aligned}
+\min_{\bm{m}} \mathcal{L}_{\mathrm{val}}(\bm{\theta}_C(\bm{m})) \quad \text{s.t. } \bm{\theta}_C(\bm{m}) = \text{Train}(\bm{m}, C),  
+\end{aligned}  
+\end{equation}  
+where \(\bm{m}\) is a binary selection vector indicating which samples to include in training, and \(\bm{\theta}_C\) represents the model parameters derived from training with budget \(C\) using the selected subset \(\bm{m}\).
+A natural approach to this problem is bilevel optimization~\cite{bi_domke2012generic, bi_franceschi2017forward, bi_grazzi2020iteration, bi_lorraine2020optimizing, bi_maclaurin2015gradient, bi_pedregosa2016hyperparameter, bi_shaban2019truncated}. To optimize \(\bm{m}\), we compute the gradient of the validation loss with respect to \(\bm{m}\), given by \(\nabla_m \mathcal{L}_{\mathrm{val}}(\bm{\theta}_C(\bm{m})) = \frac{\partial \mathcal{L}_{\mathrm{val}}}{\partial \bm{\theta}_C} \cdot \frac{\partial \bm{\theta}_C}{\partial \bm{m}}\).
+Calculating \(\frac{\partial \bm{\theta}_C}{\partial \bm{m}}\) requires assessing how model parameters vary with \(\bm{m}\), which can be approached in two ways: implicit differentiation at the optimality condition, requiring costly second-order derivatives, or unrolling the training trajectory and backpropagating, which incurs even higher computational costs. Given our emphasis on efficiency within compute constraints, both methods are impractical, especially because the assumption \(\nabla_{\bm{\theta}} \mathcal{L}_{\text{inner}}(\bm{\theta}, \bm{m}) = 0\) may not hold. The limited budget \(C\) prevents reaching a true local minimum, leaving the inner gradient non-zero and making implicit differentiation unreliable.
+Inspired by~\cite{ds_bi_zhou2022probabilistic}, we propose a learnable sampling distribution parameterized by \(\bm{s}\) and optimize \(\bm{s}\) using policy gradients instead of directly optimizing \(\bm{m}\). This approach allows us to navigate the bilevel problem without relying on gradients from the inner optimization under compute constraints.
+In this formulation, we define \(\bm{m} \in \{0,1\}^N\) as a binary mask selecting a subset from the training corpus \(\mathcal{D}\), with \(p(\bm{m} \mid \bm{s})\) representing the corresponding sampling distribution. Given a strict computational budget of \(C\) forward-backward passes, our objective is to identify the sampler that minimizes the expected validation loss after training for exactly \(C\) steps on the masked data:
+\begin{equation}  
+\label{eq:bilevel}
+\min_{\bm{s}} \mathbb{E}_{\bm{m} \sim p(\bm{m}|\bm{s})} \big[\mathcal{L}_{\mathrm{val}}(\bm{\theta}_C(\bm{m}))\big] \quad \text{s.t.} \quad \bm{\theta}_C(\bm{m}) = \mathrm{Train}(\bm{m}, C),
+\end{equation}
+where $\bm{\theta}_C(\bm{m})$ represents the model parameters obtained by training on the selected subset $\bm{m}$ with the fixed compute budget $C$. Unlike classical bilevel formulations, where the inner problem is solved to convergence, this formulation explicitly constrains training to $C$ steps, closely matching practical real-world training scenarios.  
+% A naïve implementation would require a complete run of $C$ steps for every sampled mask $\bm{m}$, rendering the approach computationally infeasible, especially for large datasets with millions of examples where the computational overhead would become prohibitively expensive.
+
+\subsection{Bilevel‑CADS: policy‑gradient baseline}  
+\label{sec:bilevel_cads}  
+
+A direct yet costly way to optimize Equation~(\ref{eq:bilevel}) is to treat the selector as a stochastic policy and apply REINFORCE.  
+The sampler is factorised over examples:
+\begin{equation}
+\label{eq:bernoulli}
+\small
+p(\bm{m}\mid \bm{s})=\prod_{i=1}^{N} s_i^{m_i}(1-s_i)^{1-m_i}
+\end{equation}
+where $s_i\!\in\![0,1]$ is the inclusion probability for example $i$.  
+The policy gradient of the outer objective is then
+\begin{equation}
+\nabla_{\bm{s}}\,
+\mathbb E_{p(\bm{m}\mid \bm{s})}
+\!\bigl[\mathcal L_{\mathrm{val}}(\bm{\theta}_C(\bm{m}))\bigr]
+= 
+\mathbb E_{p(\bm{m}\mid \bm{s})}
+\!\bigl[\mathcal L_{\mathrm{val}}(\bm{\theta}_C(\bm{m}))\,
+\nabla_{\bm{s}}\log p(\bm{m}\mid \bm{s})
+\bigr]
+\end{equation} 
+In practice we approximate the expectation with $K$ Monte‑Carlo samples:
+\begin{equation}
+\nabla_{\bm{s}} \mathbb E_{p(\bm{m}\mid \bm{s})}
+\!\bigl[\mathcal L_{\mathrm{val}}(\bm{\theta}_C(\bm{m}))\bigr] \approx
+\frac{1}{K}\sum_{k=1}^{K}
+\mathcal L_{\mathrm{val}}(\bm{\theta}_C(\bm{m}_k))
+\nabla_{\bm{s}}\log p(\bm{m}_k\mid \bm{s}),
+\quad
+\bm{m}_k\sim p(\bm{m}\mid \bm{s})
+\end{equation}
+Each gradient update therefore entails training \textit{K} independent models for \textit{C} compute units each, yielding a total cost of $K\!\times\!C$ per outer step.  
+With even modest values (e.g.\ $K{=}5$), this baseline quickly becomes prohibitive and motivates the more efficient relaxations introduced in Sections~\ref{sec:penalty-based-relax}.
+
+\subsection{Penalty‑based single‑level relaxation}  
+\label{sec:penalty-based-relax}
+To address the prohibitive computational cost of the policy gradient approach, inspired by~\cite{kwon2023fully,pan2024scalebio}, we reformulate the bilevel problem as a single-level optimization through a penalty-based relaxation.
+Instead of repeatedly training models to exhaustion for each sampled mask, we introduce an auxiliary variable $\bm{u}$ that acts as a proxy for the fully‑trained parameters $\bm{\theta}_C$ and penalise the discrepancy between the training losses of $\bm{\theta}$ and $\bm{u}$:  
+
+\begin{equation}
+\label{eq:penalty}
+\min_{\bm{s},\bm{\theta}} \mathcal{L}^\alpha_{\mathrm{penalty}}(\bm{\theta},\bm{s})  \triangleq
+\mathbb{E}_{p(\bm{m}\mid \bm{s})}
+\Bigl[
+  \mathcal{L}_{\mathrm{val}}(\bm{\theta})
+  + \alpha\bigl(\mathcal{L}_{\mathrm{trn}}(\bm{\theta},\bm{m})
+    - \mathcal{L}_{\mathrm{trn}}(\bm{u},\bm{m})\bigr)^{2}
+\Bigr]
+\end{equation}
+\iffalse
+where
+\begin{equation}
+\label{eq:penalty-def}
+\mathcal{L}^\alpha_{\mathrm{penalty}}(\bm{\theta},\bm{s})=
+\mathbb{E}_{p(\bm{m}\mid \bm{s})}
+\Bigl[
+  \mathcal{L}_{\mathrm{val}}(\bm{\theta})
+  + \alpha\bigl(\mathcal{L}_{\mathrm{trn}}(\bm{\theta},\bm{m})
+    - \mathcal{L}_{\mathrm{trn}}(\bm{u},\bm{m})\bigr)^{2}
+\Bigr].
+\end{equation}
+\fi
+with 
+\[
+\bm{u} = \mathrm{Train}(\bm{\theta}_{0},\bm{m};K), \quad K = \frac{C}{|\bm{m}|}.
+\]  
+In this formulation, \(\mathcal{L}_{\mathrm{trn}}(\bm{u},\bm{m})\) serves as a target training loss that reflects the performance of a model trained for a limited number of steps \(K\) under the given compute budget \(C\). 
+
+\textbf{Technical difficulty in solving problem (\ref{eq:penalty}). } Unlike classical bilevel settings where the inner problem reaches (or approximates) optimality, here the target loss corresponds to an intermediate, compute-constrained solution that generally does not satisfy stationary conditions (i.e., non-zero gradients). 
+This makes direct optimization challenging: naively updating the auxiliary variable \(\bm{u}\) jointly with \(\bm{\theta}\) may violate the compute budget constraint or require costly iterative inner optimization. To avoid the need for explicitly unrolling \(K\) training steps for each candidate \(\bm{m}\), we approximate \(\mathcal{L}_{\mathrm{trn}}(\bm{u},\bm{m})\) with a scale-dependent surrogate \(l(|\bm{m}|)\), which can be efficiently estimated.
+In practice, \( l(|\bm{m}|) \) is found to be well-approximated by a log-linear function of the subset size \(|\bm{m}|\), capturing how the achievable training loss scales with computational budget. We fit this log-space interpolation using training loss measurements collected at multiple subset sizes, balancing data efficiency and approximation quality. A detailed discussion of the surrogate \( l(\cdot) \) is provided in the appendix.
+Subsequently, substituting the approximation yields the single‑level objective:
+\begin{equation}  
+\label{eq:approx}  
+\mathcal{L}^\alpha_{\text{CADS}}(\bm{\theta},\bm{s})=  
+\mathbb{E}_{p(\bm{m}\mid \bm{s})}  
+\Bigl[  
+    \mathcal{L}_{\mathrm{val}}(\bm{\theta})  
+    +\alpha\bigl(\mathcal{L}_{\mathrm{trn}}(\bm{\theta},\bm{m})-l(|\bm{m}|)\bigr)^{2}  
+\Bigr].  
+\end{equation}
+Finally, by approximating the penalty objective $\mathcal{L}^\alpha_{\mathrm{penalty}}$ (\ref{eq:penalty}) with the CADS objective $\mathcal{L}^\alpha_{\mathrm{CADS}}$ (\ref{eq:approx}), we can efficiently solve the budget-constrained minimization in Problem (\ref{eq:penalty}).
+\paragraph{Optimization.}  
+Stochastic estimates of the following gradients are obtained with a single forward/backward pass per sampled subset:  
+\begin{align}  
+\nabla_{\bm{\theta}}\mathcal{L}^\alpha_{\text{CADS}}(\bm{\theta},\bm{s}) &=  
+    \mathbb{E}_{p(\bm{m}\mid \bm{s})}  
+    \bigl[  
+        \nabla_{\bm{\theta}}\mathcal{L}_{\mathrm{val}}  
+        +2\alpha\bigl(\mathcal{L}_{\mathrm{trn}}-l(|\bm{m}|)\bigr)\nabla_{\bm{\theta}}\mathcal{L}_{\mathrm{trn}}  
+    \bigr], \\
+\nabla_{\bm{s}}\mathcal{L}^\alpha_{\text{CADS}}(\bm{\theta},\bm{s}) &=  
+    \mathbb{E}_{p(\bm{m}\mid \bm{s})}  
+    \bigl[  
+        \bigl(\mathcal{L}_{\mathrm{val}}+\alpha(\mathcal{L}_{\mathrm{trn}}-l(|\bm{m}|))^{2}\bigr)\,  
+        \nabla_{\bm{s}}\log p(\bm{m}\mid \bm{s})  
+    \bigr].  
+\end{align}  
+Any first‑order optimizer (e.g.~Adam) can then update $(\bm{\theta},\bm{s})$ jointly.  
+
+\subsection{CADS‑E: example‑level selection}  
+In the example-level approach, CADS learns to select individual examples by assigning a parameter $s_i \in [0,1]$ to each example $i$ in the training corpus.  
+We model the sampling distribution $p(\bm{m}|\bm{s})$ as independent Bernoulli variables for each example as the same distribution defined in~(\ref{eq:bernoulli}).  
+The gradient of $\log p(\bm{m}|\bm{s})$ with respect to $s_i$ is straightforward:  
+\begin{equation} 
+\small
+    \frac{\partial}{\partial s_i} \log p(\bm{m}|\bm{s}) = \frac{m_i}{s_i} - \frac{1-m_i}{1-s_i}.  
+    \label{eq:bernoulli_grad}  
+\end{equation}  
+During optimization, each subset $m_i$ represents a binary mask over the training examples.  
+Algorithm~\ref{alg:cads_e} provides the pseudocode implementation.   
+
+\begin{figure}[t]  
+    \begin{minipage}{0.47\textwidth}  
+        \begin{algorithm}[H]  
+            \caption{CADS‑E (example‑level)}  
+            \label{alg:cads_e}  
+            \begin{algorithmic}[1]  
+                \REQUIRE budget $C$, initial $\bm{\theta}_{0},\bm{s}_0$, subset count $K$
+                \WHILE{not converged}  
+                    \STATE Sample $K$ subsets $\{\bm{m}_k\}\sim p(\bm{m}\!\mid\!\bm{s})$  
+                    \FOR{each $\bm{m}_k$}   
+                        \STATE Compute $\mathcal{L}_{\mathrm{trn}}(\bm{\theta}, \bm{m}_k)$  
+                        \STATE Compute $\mathcal{L}_{\mathrm{val}}(\bm{\theta})$  
+                        \STATE Compute approximate loss $l(|\bm{m}_k|)$
+                        \STATE \textcolor{white}{ (N/A)}
+                    \ENDFOR  
+                    \STATE Estimate $\mathcal{L}_{\text{CADS}}$ using \eqref{eq:approx}  
+                    \STATE Compute gradients $\nabla_{\bm{\theta}}\mathcal{L}$ and $\nabla_{\bm{s}}\mathcal{L}$  
+                    \STATE Update $\bm{\theta}\leftarrow\bm{\theta}-\eta_{\bm{\theta}}\nabla_{\bm{\theta}}\mathcal{L}$  
+                    \STATE Update $\bm{s}\leftarrow \bm{s}-\eta_{\bm{s}}\nabla_{\bm{s}}\mathcal{L}$  
+                    \STATE \textcolor{white}{Update variance parameter (N/A)}  
+                \ENDWHILE  
+                \RETURN $\bm{s}^*, \bm{\theta}^*$  
+            \end{algorithmic}  
+        \end{algorithm}  
+    \end{minipage}  
+    \hfill  
+    \begin{minipage}{0.5\textwidth}  
+        \begin{algorithm}[H]  
+            \caption{CADS‑S (source‑level)}  
+            \label{alg:cads_s}  
+            \begin{algorithmic}[1]  
+                \REQUIRE budget $C$, sources $\{\mathcal{D}_{i}\}$, initial $\bm{\theta}_{0},\bm{s}_0$, subset count $K$, variance $\sigma$  
+                \WHILE{not converged}  
+                    \STATE Sample $K$ ratio vectors $\{\bm{r}_k\}\sim p(\bm{r}\!\mid\!\bm{s})$  
+                    \FOR{each $\bm{r}_k$}  
+                        \STATE Form $\mathcal{D}_{\bm{r}_k}$ by subsampling sources  
+                        \STATE Compute $\mathcal{L}_{\mathrm{trn}}(\bm{\theta}, \mathcal{D}_{\bm{r}_k})$  
+                        \STATE Compute $\mathcal{L}_{\mathrm{val}}(\bm{\theta})$  
+                        \STATE Compute approximate loss $l(|\mathcal{D}_{\bm{r}_k}|)$  
+                    \ENDFOR  
+                    \STATE Estimate $\mathcal{L}_{\text{CADS}}$ using \eqref{eq:approx}  
+                    \STATE Compute gradients $\nabla_{\bm{\theta}}\mathcal{L}$ and $\nabla_{\bm{s}}\mathcal{L}$  
+                    \STATE Update $\bm{\theta}\leftarrow\bm{\theta}-\eta_{\bm{\theta}}\nabla_{\bm{\theta}}\mathcal{L}$  
+                    \STATE Update $\bm{s}\leftarrow \bm{s}-\eta_{\bm{s}}\nabla_{\bm{s}}\mathcal{L}$  
+                    \STATE Update variance $\sigma\leftarrow0.99\,\sigma$  
+                \ENDWHILE  
+                \RETURN $\bm{s}^*, \bm{\theta}^*$  
+            \end{algorithmic}  
+        \end{algorithm}  
+    \end{minipage}  
+\end{figure}  
+
+\subsection{CADS‑S: source‑level selection}  
+In the source-level variant, instead of parameterizing selection at the level of individual samples, we aggregates samples into broader source groups and assigns weights at this higher level. Specially, the dataset is partitioned into $n$ sources $\{\mathcal{D}_{i}\}_{i=1}^{n}$, and CADS learns a sampling ratio vector $\bm{r}\in[0,1]^{n}$.  
+We let $p(\bm{r}\mid \bm{s})$ be an independent truncated Gaussian for each dimension:  
+\begin{equation}
+\small
+p(\bm{r}\mid \bm{s})=\prod_{j=1}^{n}
+\frac{\phi\!\bigl((r^{j}-s^{j})/\sigma\bigr)}
+{\sigma[\Phi\!\bigl((1-s^{j})/\sigma\bigr)-\Phi\!\bigl((-s^{j})/\sigma\bigr)]},
+\end{equation}
+where $\phi$ and $\Phi$ denote the standard normal PDF and CDF.  
+This is a truncated Gaussian centered at $s^j$ with scale $\sigma$. We truncate to \([0,1]\) to obtain valid sampling values. The denominator normalizes the distribution, ensuring the integral equals \(1\) after truncation. 
+To stabilize optimization, we anneal $\sigma$ using $\sigma_{t}=0.99^{t}\sigma_{0}$. This gradually concentrates probability mass around $s^j$, leading to consistent sampling results. We visualize the distribution under different $\bm{s}$ and $\sigma$ values in the appendix.
+Algorithm~\ref{alg:cads_s} provides pseudo‑code of CADS-S.

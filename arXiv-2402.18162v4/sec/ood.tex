@@ -1,0 +1,42 @@
+\section{OOD Detection with NAP}
+\subsection{Basics}
+First, we will provide a brief overview of typical settings for OOD detection in image classification networks. Typically, classification networks use ID data, that is, known training data sets, to train a classification model. Once training is completed, the model's parameters are fixed, enabling it to effectively classify the categories within the training data set.
+In the testing phase, to identify OOD samples, researchers usually introduce a scoring function into the model. During the inference, samples mixed with OOD data are fed into this trained model. The model not only classifies each sample, but also uses a scoring function to generate a score for each one. This score is used to predict whether a sample belongs to an ID class in the training set, or an unknown OOD class.
+
+\subsection{Design of scoring function}
+\label{sec:scoring}
+Based on our prior proposed previously in Section~\ref{sec:nap}, we propose a SNR-like scoring function. In our formulation, the mean activation value is interpreted as the noise intensity, while the maximal activation value is regarded as the signal strength. This conceptual framework leads to the following scoring function:
+\begin{equation}
+   S_{\textit{NAP}}(x;f)=\frac{1}{C}\sum_{j=1}^{C}\left(\frac{\text{Max}(\mathbf{A}_j)}{\text{Mean}(\mathbf{A}_j) + \epsilon}\right)^2 , 
+\end{equation}
+% \[ S_{\textit{NAP}}(x;f)=\frac{1}{C}\sum_{j=1}^{C}\left(\frac{\text{Max}(\mathbf{A}_j)}{\text{Mean}(\mathbf{A}_j) + \epsilon}\right)^2 , \]
+where \( C \) represents the number of channels before global pooling. Note that a small constant $\epsilon>0$ is added to ensure the numerical stability of the computation.
+
+
+\noindent\textbf{Scoring function for Transformers.} 
+Consistent with the NAP score used in CNNs, we calculate the mean and maximum values of the attention that the cls token has towards all other tokens. 
+The attention vector, denoted as $A$, has a dimensionality of 
+\((l+1)\), where \(l\) represents the sequence length.
+To maintain consistency with the NAP score calculation method used in CNN networks, we would typically divide the maximum value by the mean. However, we note that the mean value of the attention vector is always \(1/(l+1)\), rendering the denominator superfluous. Therefore, for simplicity, we design the NAP score function for Transformers as 
+$S_{NAP}^{Former} = \text{Max}(A)$.
+
+\noindent\textbf{OOD detection.}
+The usage of scoring function $S_{\textit{NAP}}(x;f)$ in this paper is similar to that of the energy score $-E(x;f)$. The energy scoring function \(E(x; f)\) converts the logits output of the classification network \(f\) into a scalar \(E(x; f) = - \log \sum_{i=1}^{K} e^{f_i(x)}\), where \(f_i(x)\) is the logits output of category \(i\). In OOD detection, the score employed for OOD detection is the negative energy score, \(-E(x; f)\). Therefore, ID data is given a higher score, while OOD data is assigned a lower score.
+
+We can combine these two scoring functions. In this paper, we adopt the weighted geometric mean method to combine them:
+% $$S_{\textit{NAP-E}}(x;f,w)=-E(x;f)^w\cdot S_{\textit{NAP}}(x;f)^{1-w}. $$
+\begin{equation}
+    S_{\textit{NAP-E}}(x;f,w)=-E(x;f)^w\cdot S_{\textit{NAP}}(x;f)^{1-w}. 
+\end{equation}
+And when using $S_{\textit{NAP}}(x;f)$ to enhance other energy score based OOD methods, we simply replace the function $f$ in the above formula with the specific function of the corresponding method, such as \(f^{\textit{DICE}}\), \(f^{\textit{ReAct}}\), \(f^{\textit{ASH}}\), etc.
+
+\noindent\textbf{How to find a optimal parameter \(w\)?}
+\label{sec:how_to_find_w}
+When combining NAP with different OOD detection methods, the optimal weight parameter \(w\) varies. To obtain the optimal parameter, we utilized a set of data transformation techniques (such as Gaussian noise, glass blur, motion blur, etc., more details in the Appendix~\ref{appendix:w}) to generate a corrupted dataset based on the ID dataset, serving as pseudo OOD data. For the choice of transformation types, we referred to \cite{hendrycks2018corp}. Utilizing this set of OOD data, we employed a binary search method to find the optimal \(w\). Through experimentation with various datasets and methods, we found that this search approach quickly identifies the optimal \(w\), which generalizes well to real OOD datasets. Refer to Appendix~\ref{appendix:w} for more details about this process.
+
+\noindent\textbf{Discussion.}
+\begin{itemize}
+    \item \textbf{Plug-and-play simplicity:} The scoring function we proposed is a  plug-and-play approach that can be easily integrated into existing neural network architectures. It requires no additional training or external data and retains the model's inherent classification capabilities. These properties make it practical and suitable for a variety of applications.
+
+    \item \textbf{Orthogonal to existing approaches:} Based on our proposed priors, the scoring function we design is orthogonal to existing methods. As shown in Figure~\ref{fig:one}, the value ranges of the within-channel activation mean values of ID samples and OOD samples overlap. This puts existing methods into trouble when distinguishing between ID and OOD samples with close means values. Based on the prior we proposed, this kind of dilemma can be solved naturally, which illustrates the power of our proposed priors to provide new perspectives for identifying OOD data.
+\end{itemize}

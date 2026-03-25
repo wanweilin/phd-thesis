@@ -1,0 +1,48 @@
+\newpage
+\appendix
+\newcommand{\mytoptitlebar}{
+  %\hrule height 4
+  \noindent\rule{\textwidth}{4pt}
+  \vskip 0.16in
+  %\vspace{0.1in}
+  %\vskip -\parskip%
+}
+\newcommand{\mybottomtitlebar}{
+  %\vskip 0.01in
+  %\vskip -\parskip
+  %\hrule height 1
+  \noindent\rule{\textwidth}{1.pt}
+  %\vskip 0.05in%
+}
+
+
+\mytoptitlebar
+\begin{center}
+	{\Large\bf Supplemental Material: Computational Budget Should Be Considered in Data Selection }
+\end{center}
+\mybottomtitlebar
+\vskip 0.2in
+
+% \section*{Appendix}
+In this appendix, we provide comprehensive additional materials to supplement the main text. The contents include:
+\begin{itemize}
+\item \textbf{Broader impacts (Section~\ref{appendix:impacts}):} A discussion on the broader implications of our research.
+\item \textbf{Experimental setting and implementation details (Section~\ref{appendix:experimental_settings}):} Detailed information on the experimental settings and implementation details.
+\item \textbf{Log-linear surrogate of compute-constrained training loss (Section~\ref{appendix:surrogate}):} Explanation of approximating \(\mathcal{L}_{\mathrm{trn}}(\mathbf{u},\mathbf{m})\) by the scale-dependent surrogate \(l(|\mathbf{m}|)\), its log-space interpolation, and fitting procedure.
+\item \textbf{Visualizations on truncated Gaussian distribution (Section~\ref{appendix:gaussian}):} Detailed visualization on the truncated Gaussian distribution.
+\item \textbf{Additional experimental results (Section~\ref{appendix:additional-results}):} MNIST experiments varying the total compute budget to compare random, PBCS, CADS-E, and Bilevel-CADS. The results show that our method consistently achieves the highest accuracy (Table~\ref{tab:mnist_vary_budget}). 
+\item \textbf{Time efficiency analysis (Section~\ref{appendix:time_efficiency}):} Benchmarking of average training and sampling runtimes on representative hardware.
+\item \textbf{Scalability to other bilevel optimization problems (Section~\ref{appendix:scala2other}):} Discussion on the applicability conditions, loss estimation accuracy, and a validation framework for applying CADS to new domains.
+\item \textbf{Limitations and future work (Section~\ref{appendix:limitation}):} Analysis of the limitations in our current framework, and plans for future improvements.
+\item \textbf{Licenses for existing assets (Section~\ref{appendix:license}):} Acknowledgment and respect for the licenses and terms of use of datasets and code libraries utilized in our research.
+\end{itemize}
+
+\input{secs/appendix/broader_impact}
+\input{secs/appendix/exp_setting_impl}
+\input{secs/appendix/surrogate}
+\input{secs/appendix/truncated}
+\input{secs/appendix/additional_results}
+\input{secs/appendix/efficiency}
+\input{secs/appendix/applicable}
+\input{secs/appendix/limit}
+\input{secs/appendix/license}

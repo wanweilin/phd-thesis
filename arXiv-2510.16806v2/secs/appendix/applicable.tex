@@ -1,0 +1,16 @@
+\section{Scalability to Other Bilevel Optimization Problems}
+\label{appendix:scala2other}
+CADS is designed to address a fundamental challenge in bilevel optimization: scenarios where the inner-level problem's convergence is hindered by computational budget constraints. Many practical bilevel problems suffer from this issue, where traditional methods that assume unlimited computational resources for inner-level convergence often fall short. We have also successfully applied a CADS-like method to resource-intensive diffusion models, demonstrating its potential beyond the scope of this work. The scalability of CADS to other bilevel problems primarily depends on the following factors:
+
+\paragraph{Applicability Conditions}
+The core premise of CADS is most relevant when the inner-level optimization is computationally expensive and cannot be fully converged. Our approach provides a framework to handle such resource-constrained scenarios, which are common in real-world applications but often overlooked by conventional methods.
+
+\paragraph{Loss Estimation Accuracy}
+The effectiveness of CADS in a new domain hinges on the accuracy of the loss estimator. As demonstrated in our analysis of loss estimation generalization, the proposed estimator maintains relatively stable predictive performance across the diverse experimental domains explored in this paper. This stability suggests that similar performance may be achievable in other domains with comparable data characteristics.
+
+\paragraph{Validation Framework for New Domains}
+To adapt CADS to a new bilevel optimization problem, we propose the following validation framework:
+\begin{itemize}
+\item \textbf{Loss Estimator Generalization Assessment.} Before full-scale implementation, it is crucial to assess whether the data distribution characteristics of the new domain can be reliably predicted. This can be achieved by conducting experiments similar to our generalization evaluation to validate the feasibility of loss estimation.
+\item \textbf{Domain-Adaptive Estimator Design.} While our current estimator is effective for data selection problems, different bilevel scenarios might benefit from specialized estimators. The architecture of the loss estimator should be tailored to the specific requirements and data characteristics of the target domain to ensure optimal performance.
+\end{itemize}

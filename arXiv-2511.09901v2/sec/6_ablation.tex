@@ -1,0 +1,11 @@
+\section{Ablation Study}  
+In the following, we conduct comprehensive ablation studies to analyze the key components of our framework. 
+
+\paragraph{SWaST improves coreset quality.} Extending the experiments in Tab.~\ref{tab:tab1}, we further evaluate SWaST by introducing noise into the datasets. Using EL2N~\cite{paul2021deep} as the coreset selection method (detailed in the appendix), we track the proportion of noisy samples in each selected coreset throughout the training process. The results are visualized as line plots in Fig.~\ref{fig:noise_ratio}. The comparison shows that SWaST-cut helps the coreset algorithm better identify clean samples compared to the coreset-only training baseline. Specifically, in the final coreset, we achieves a 10.62\% reduction in the noise ratio relative to the baseline.
+
+\paragraph{SWaST mitigates overfitting on coreset training.} 
+Training on small coresets poses inherent overfitting risks due to limited data diversity. We evaluate this phenomenon by comparing test and validation loss between coreset-only training and our SWaST approach. As shown in Fig.~\ref{fig:overfitting}, SWaST consistently reduces the overfitting gap across all prune rates, with the reduction effect strengthening progressively as prune rate increases. This demonstrates that our sparse training paradigm effectively regularizes the model by preventing over-specialization to the limited coreset data. 
+
+\paragraph{SWaST trains models with superior noise resistance.}
+Following our previous setup, we extend the experiments from Tab.~\ref{tab:tab1} by introducing 10\% label noise into the datasets. We analyze the loss distributions of both noisy and clean samples throughout the training process, visualizing the results as line plots in Fig.~\ref{fig:noise_loss}. The visualization reveals a clear pattern: models with pruning exhibit higher loss values for noisy samples, indicating that pruning prevents the model from memorizing erroneous patterns in noisy data.  
+

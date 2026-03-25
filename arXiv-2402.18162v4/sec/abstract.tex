@@ -1,0 +1,9 @@
+\begin{abstract}
+  Out-of-distribution detection (OOD) is a crucial technique for deploying machine learning models in the real world to handle the unseen scenarios. 
+In this paper, we first propose a simple yet effective \textbf{N}eural \textbf{A}ctivation \textbf{P}rior (NAP) for OOD detection.
+Our neural activation prior is based on a key observation that,  for a channel before the global pooling layer of a fully trained neural network, the probability of a few  neurons being activated with a large response by an in-distribution (ID) sample is significantly higher than that by an OOD sample. An intuitive explanation is that for a model fully trained on ID dataset, each channel   would play a role in detecting a certain pattern in  the ID dataset, and a few neurons can be activated with a large response when the pattern is detected in an input sample.
+Then, a new scoring function based on this prior is proposed  to highlight the role of these strongly activated neurons in OOD detection.
+Our approach is plug-and-play and does not lead to any performance degradation on ID data classification and requires no extra training or statistics from training or external datasets.
+Notice that previous methods primarily rely on  post-global-pooling features of the neural networks, while the within-channel distribution information we leverage would be discarded by the global pooling operator. Consequently, our method is orthogonal to existing approaches and can be effectively combined with them in various applications. Experimental results show that our method achieves the state-of-the-art performance on CIFAR benchmark and ImageNet dataset, which demonstrates the power of the proposed prior. 
+Finally, we extend our method to Transformers and the experimental findings indicate that NAP can also significantly enhance the performance of OOD detection on Transformers, thereby demonstrating the broad applicability of this prior knowledge.
+\end{abstract}
