@@ -1,17 +1,17 @@
 # 博士论文写作进度
 
 ## 当前阶段
-Phase 3: 段落要点 — 进行中
+Phase 5: LaTeX定稿 — 进行中（框架已搭建，表格为占位，图片待绘制）
 
 ## 各章进度
-| 章节 | Phase 1 全文骨架 | Phase 2 章节骨架 | Phase 3 段落要点 | Phase 4 正文草稿 | Phase 5 润色 |
-|------|:---:|:---:|:---:|:---:|:---:|
-| 第一章 绪论 | done | done | done | | |
-| 第二章 相关工作 | done | done | done | | |
-| 第三章 CADS | done | done | done | | |
-| 第四章 SWaST | done | done | done | | |
-| 第五章 NAP | done | done | done | | |
-| 第六章 总结与展望 | done | done | done | | |
+| 章节 | Phase 1 全文骨架 | Phase 2 章节骨架 | Phase 3 段落要点 | Phase 4 正文草稿 | Phase 5 LaTeX定稿 | Phase 6 润色 |
+|------|:---:|:---:|:---:|:---:|:---:|:---:|
+| 第一章 绪论 | done | done | done | done | done | |
+| 第二章 相关工作 | done | done | done | done | done | |
+| 第三章 CADS | done | done | done | done | done | |
+| 第四章 SWaST | done | done | done | done | done | |
+| 第五章 NAP | done | done | done | done | done | |
+| 第六章 总结与展望 | done | done | done | done | done | |
 
 ## Phase 0 清单
 - [x] 通读三篇论文，列出符号差异表 → `thesis/notation.md`
@@ -37,6 +37,18 @@ Phase 3: 段落要点 — 进行中
 - [2026-03-26] 第三、四章同属训练侧，不强求每章对应独立阶段
 - [2026-03-26] 第三、四章各增加讨论小节（loss predictor / scaling laws）
 - [2026-03-26] 写作质量核心原则 → `WRITING_PRINCIPLES.md`（七条原则）
+
+## Phase 5 清单
+- [x] 解压fduthesis复旦模板到 `latex/` 目录
+- [x] 创建 `latex/main.tex` 主文件（fduthesis doctor模板）
+- [x] 合并参考文献 → `latex/main.bib`（199条）
+- [x] 转换6章 draft.md → ch1~ch6 .tex 文件
+- [x] 撰写中英文摘要
+- [ ] 填充占位表格（从原论文提取实验数据）
+- [ ] 绘制占位图（研究地图、框架图等）
+- [ ] 填写论文元信息（作者、导师、学号等）
+- [ ] 编译测试并修复格式问题
+- [ ] 核实所有 [VERIFY] 标注的实验数据
 
 ## 待解决问题
 - [ ] 与导师确认论文大纲和双主线叙事逻辑

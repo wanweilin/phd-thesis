@@ -1,0 +1,263 @@
+\chapter{数据选择与权重剪枝的协同优化}
+
+\section{章节引言}
+
+第三章揭示了数据选择与计算预算之间的交互：不同预算下最优数据子集截然不同。沿着交互视角继续追问：计算预算之外，模型容量（参数量）是否也与数据选择存在交互？
+
+直觉上，如果模型被剪枝到一半的参数，最优训练子集还是相同的吗？反过来，如果训练数据中有大量冗余噪声，剪枝的难度是否会改变？现有实践给出了否定的答案。在典型的深度学习工作流中，���据选择与���型剪枝被视为独立的流水线步骤\cite{killamsetty2021grad, evci2020rigging}：先做核心子集选择再在选出的子集上训练完整模型，或先训练完整模型再做剪枝。这种流水线式处理隐含假设数据冗余与参数冗余互不影响。
+
+然而，两类冗余并非独立。数据冗余（噪声或重复样本）导致模型为拟合这些样本而保留不必要的权重，使剪枝变得困难；参数冗余（可被安全移除的权重）扩大了特征空间维度，使基于特征的核心子集选择失效。这种双向耦合关系意味着，独立处理两类冗余会同时降低剪枝和数据选择的效果。
+
+基于这一观察，本章提出SWaST（Simultaneous Weight and Sample Tailoring）框架：通过交替执行权重剪枝与核心子集选择，同时削减两类冗余，建立协同效应。本章的一个关键发现是，同时移除权重和样本会导致"双重损失"（Critical Double-Loss）问题——即关键参数与其支撑样本被同时移除导致的不可逆退化——为此SWaST引入了专门的状态保护机制。
+
+
+\section{冗余样本与冗余权重的相互作用分析}
+
+\subsection{分析框架：多项式插值}
+
+为透明地分析数据冗余与参数冗余的相互作用，本文选择多项式插值作为分析工具。选择这一工具的原因在于：多项式阶数可精确控制"模型容量"（类比于参数量），插值节点可精确控制"数据"（类比于训练样本），且结果可解析理解——无需依赖深度学习训练的随机性。
+
+具体地，以Runge函数\cite{runge1901empirische}为目标函数，构造含冗余（噪声）节点的插值问题。图~\ref{fig:swast-polynomial}展示了这一分析的结果。
+
+% [图4-1: 多项式插值分析]
+\begin{figure}[htb]
+  \centering
+  % \includegraphics[width=\textwidth]{figures/swast-polynomial.pdf}
+  \fbox{\parbox{\textwidth}{\centering\vspace{2.5cm}
+    \textbf{占位图：多项式插值分析}\\[0.5em]
+    (a) 含噪声样本时的拟合；(b) 干净样本时的拟合；(c) 不同阶数下的逼近误差\\
+    对应原论文Fig.1，需手绘
+  \vspace{2.5cm}}}
+  \caption{多项式插值分析——数据冗余与参数冗余的相互作用}
+  \label{fig:swast-polynomial}
+\end{figure}
+
+\subsection{冗余样本阻碍剪枝}
+
+在Runge函数插值实验中，向节点集合加入噪声样本后，高阶多项式系数发生显著变化。% [VERIFY: 具体实验]
+噪声样本迫使多项式分配高阶项来拟合噪声模式，导致这些高阶项的系数异常增大。如果采用基于幅度的剪枝准则\cite{han2015learning}（即移除系数最小的项），这些"因噪声膨胀的系数"会被误判为重要参数而保留，真正对函数逼近有贡献的低阶项反而可能被移除。
+
+将这一观察迁移到深度学习：噪声或冗余训练样本导致模型过拟合\cite{zhang2021understanding}，权重分布变得平坦（过拟合使得更多权重被"激活"以记忆噪声模式），使得基于幅度的剪枝准则难以区分重要与不重要的权重。换言之，\textbf{数据冗余阻碍了有效剪枝}。
+
+\subsection{冗余参数干扰数据选择}
+
+从核心子集选择的角度看，其目标是找到子集$\hat{\mathcal{D}}$使得函数逼近误差$\mathcal{I}(\mathcal{D}, \hat{\mathcal{D}})$最小。如图~\ref{fig:swast-polynomial}(c)所示，该误差随函数空间维度（多项式阶数，类比于参数量）呈指数增长。
+
+无关参数——即可被安全移除而不影响模型性能的权重——人为增加了函数空间的有效维度，使核心子集选择的搜索空间变大、逼近难度上升。相应地，剪枝后的紧凑模型降低了有效维度，使核心子集选择更容易找到高质量子集。换言之，\textbf{参数冗余干扰了有效的数据选择}。
+
+\subsection{协同优化的动机}
+
+综合上述两个方向的分析：数据冗余阻碍剪枝，参数冗余干扰数据选择。二者形成双向耦合，独立处理任何一方都受限于另一方的冗余。
+
+自然的解决思路是交替执行：先剪枝降低模型复杂度以帮助数据选择，再用精选的数据训练以帮助下一轮剪枝——形成良性循环。这正是SWaST框架的核心设计。
+
+
+\section{方法：SWaST框架}
+
+\subsection{交替优化机制}
+
+SWaST的整体流程分为三个阶段。图~\ref{fig:swast-framework}展示了完整框架。
+
+% [图4-2: SWaST框架总览]
+\begin{figure}[htb]
+  \centering
+  % \includegraphics[width=\textwidth]{figures/swast-framework.pdf}
+  \fbox{\parbox{\textwidth}{\centering\vspace{2.5cm}
+    \textbf{占位图：SWaST框架总览}\\[0.5em]
+    展示热身、交替（剪枝$\leftrightarrow$coreset选择）、状态保护的完整流程\\
+    对应原论文Fig.2，需手绘
+  \vspace{2.5cm}}}
+  \caption{SWaST框架总览——热身、交替优化与状态保护}
+  \label{fig:swast-framework}
+\end{figure}
+
+\textbf{热身阶段：}使用全量数据训练$\mathcal{K}$轮，为模型建立良好的初始化。这一阶段确保后续的剪枝和数据选择基于一个已有合理表示能力的模型，而非随机初始化。
+
+\textbf{交替阶段：}每$\mathcal{R}$轮执行一次核心子集选择和在线剪枝的交替操作。在每个交替点，首先利用当前模型状态重新选择核心子集$\hat{\mathcal{D}}$，然后执行一步在线剪枝更新稀疏模式，最后在新的子集和新的稀疏模型上继续训练$\mathcal{R}$轮。
+
+\textbf{交替频率$\mathcal{R}$的选择：}$\mathcal{R}$过小导致模型在每次选择间的训练不充分，引起不稳定；$\mathcal{R}$过大则错失协同机会，退化为接近流水线方式。% [VERIFY: 消融实验]
+
+SWaST包含两种变体。\textbf{SWaST-trim}仅剪枝全连接（FC）层，是保守策略——FC层参数量大但对特征提取的影响相对较小，稳定性好但效率提升有限。\textbf{SWaST-cut}执行全局网络剪枝，是激进策略——可实现高达90\%的FLOPs削减，但面临更严重的双重损失风险。
+
+两种变体均使用RigL\cite{evci2020rigging}作为在线剪枝方法。RigL允许稀疏模式在训练过程中通过"生长"与"修剪"不断演化\cite{evci2022gradient}，而非一次性确定，这种动态特性与SWaST的交替优化天然兼容。
+
+\subsection{双重损失问题}
+
+SWaST框架面临一个独特的挑战：\textbf{双重损失（Critical Double-Loss）}。图~\ref{fig:swast-double-loss}展示了这一现象。
+
+% [图4-3: 双重损失现象示意]
+\begin{figure}[htb]
+  \centering
+  % \includegraphics[width=0.8\textwidth]{figures/swast-double-loss.pdf}
+  \fbox{\parbox{0.8\textwidth}{\centering\vspace{2cm}
+    \textbf{占位图：双重损失现象}\\[0.5em]
+    对比标准训练、仅剪枝、仅coreset、同时剪枝+coreset四种情况\\
+    对应原论文Fig.3，需手绘
+  \vspace{2cm}}}
+  \caption{"双重损失"现象——同时剪枝与数据选择导致的性能退化}
+  \label{fig:swast-double-loss}
+\end{figure}
+
+双重损失是指：某个关键参数被剪枝移除的同时，帮助该参数恢复信息的训练样本也被核心子集选择排除。当两个操作单独执行时，各有恢复机制——剪枝后模型可从完整数据中重新学习被移除参数的功能，数据移除后模型可从冗余参数中补偿信息损失。但当两个操作同时发生时，恢复路径被双重切断，导致几乎不可逆的性能退化。这一问题在高剪枝率与小核心子集的激进设置下尤为严重。
+
+值得注意的是，在经典机器学习中（如支持向量机），KKT条件可以提供安全筛除特征和样本的理论保障\cite{shibagaki2016simultaneous, kuhn2013nonlinear}——在移除前即可判断是否影响最优解。然而，深度学习的非凸损失面没有类似的全局保障，无法事先判断某次移除是否安全。因此需要事后检测和修复机制，而非事前保障。
+
+\subsection{状态保护机制}
+
+为缓解双重损失问题，SWaST引入了状态保护机制，包括状态记录和状态约束训练两个组件。
+
+\textbf{状态记录（State Recording）。}每次执行核心子集选择后，记录当前模型在所选子集上的完整前向输出（logits）：
+\begin{equation}\label{eq:swast-recording}
+  \tilde{\mathcal{D}} = \{(\mathbf{x}_i, \mathbf{z}_i) : \mathbf{z}_i = f_{\btheta_{\text{pre}}}(\mathbf{x}_i), \, (\mathbf{x}_i, y_i) \in \hat{\mathcal{D}}\}
+\end{equation}
+这些logits快照捕获了剪枝和数据选择之前模型的知识状态，作为后续训练的"安全锚点"。
+
+\textbf{状态约束训练（State-Constrained Training）。}在每个交替周期内的训练使用复合损失：
+\begin{equation}\label{eq:swast-loss}
+  \Ltotal = \Lce + \lambda \sum_{i} \mathrm{KL}(\mathrm{softmax}(\mathbf{z}_i) \| \mathrm{softmax}(f_\btheta(\mathbf{x}_i)))
+\end{equation}
+其中$\Lce$为标准交叉熵损失，KL散度项衡量当前模型输出与记录状态之间的偏差。
+
+KL散度项同时起到检测和修复两个作用：如果剪枝导致某些样本的模型输出大幅偏离记录状态，KL值会升高，提供预警信号；对应的梯度会推动模型恢复到记录状态附近，弥补剪枝带来的知识损失。$\lambda = 0.1$在稳定性和灵活性之间取得平衡——过大会限制模型从新核心子集中学习新知识，过小则无法有效防止双重损失。% [VERIFY: 消融实验]
+
+
+\section{实验}
+
+\subsection{实验设置}
+
+实验在四个数据集上进行：CIFAR-10\cite{krizhevsky2009cifar}、CIFAR-100\cite{krizhevsky2009cifar}、TinyImageNet\cite{le2015tiny}和ImageNet-1K\cite{deng2009imagenet}。网络架构使用ResNet-18和ResNet-101\cite{he2016deep}。核心子集选择方法分别采用GradMatch\cite{killamsetty2021grad}（CIFAR）、Moderate\cite{xia2022moderate}（TinyImageNet）和EL2N\cite{paul2021deep}（ImageNet）。剪枝方法统一使用RigL\cite{evci2020rigging}。% [VERIFY: 完整设置]
+
+对比基线包括：纯核心子集选择（无剪枝）、纯剪枝（全数据）、以及流水线方式（先选后剪或先剪后选）。
+
+\subsection{主实验结果}
+
+表~\ref{tab:swast-main}展示了SWaST-trim和SWaST-cut在不同剪枝率（10\%--90\%）和核心子集大小下的综合准确率对比。
+
+% [表4-1: SWaST综合准确率对比]
+\begin{table}[htb]
+  \centering
+  \caption{SWaST-trim和SWaST-cut在不同剪枝率和coreset大小下的准确率对比}
+  \label{tab:swast-main}
+  \fbox{\parbox{0.9\textwidth}{\centering\vspace{2cm}
+    \textbf{占位表：对应原论文Table 1}\\[0.5em]
+    % [VERIFY: Table 1详细数据]
+  \vspace{2cm}}}
+\end{table}
+
+关键发现如下：% [VERIFY: Table 1详细数据]
+
+第一，SWaST在几乎所有设置下优于纯核心子集选择基线，最高提升达17.83\%。这一提升并非来自更多的数据或更大的模型，而是来自两类冗余消除之间的协同效应。
+
+第二，协同效应在极端设置下最为显著。当剪枝率很高（如90\%）且核心子集很小（如5\%）时，两类冗余的耦合最强——冗余参数严重干扰数据选择，冗余数据严重阻碍剪枝——此时SWaST相对于独立方法的优势最大。
+
+\subsection{效率分析}
+
+图~\ref{fig:swast-pareto}展示了FLOPs削减与准确率之间的Pareto前沿对比。
+
+% [图4-4: 效率-精度权衡图]
+\begin{figure}[htb]
+  \centering
+  % \includegraphics[width=0.7\textwidth]{figures/swast-pareto.pdf}
+  \fbox{\parbox{0.7\textwidth}{\centering\vspace{2cm}
+    \textbf{占位图：FLOPs削减 vs. 准确率的Pareto前沿}\\[0.5em]
+    气泡面积$\propto$训练时间，对应原论文Fig.4，需手绘
+  \vspace{2cm}}}
+  \caption{FLOPs削减与准确率的效率-精度权衡}
+  \label{fig:swast-pareto}
+\end{figure}
+
+表~\ref{tab:swast-efficiency}进一步量化了准确率与时间效率的权衡。
+
+% [表4-2: 准确率与时间效率对比]
+\begin{table}[htb]
+  \centering
+  \caption{准确率与时间效率对比}
+  \label{tab:swast-efficiency}
+  \fbox{\parbox{0.8\textwidth}{\centering\vspace{1.5cm}
+    \textbf{占位表：对应原论文Table 2}\\[0.5em]
+    % [VERIFY: 效率曲线图]
+  \vspace{1.5cm}}}
+\end{table}
+
+SWaST在同等FLOPs预算下准确率更高，或在同等准确率下FLOPs更低，在效率-精度的Pareto前沿上全面优于独立方法。% [VERIFY: 效率曲线图]
+
+\subsection{双向��益验证}
+
+为直接验证协同效应的双向性，本文设计了两组分析实验。图~\ref{fig:swast-bidirectional}展示了结果。
+
+% [图4-5: 双向增益验证]
+\begin{figure}[htb]
+  \centering
+  % \includegraphics[width=\textwidth]{figures/swast-bidirectional.pdf}
+  \fbox{\parbox{\textwidth}{\centering\vspace{2cm}
+    \textbf{占位图：双向增益验证}\\[0.5em]
+    (a) coreset中噪声比例对比；(b) 过拟合对比；(c) 损失差异分析\\
+    对应原论文Fig.5三个子图，需手绘
+  \vspace{2cm}}}
+  \caption{双向增益验证——剪枝提升核心子集质量，核心子集提升剪枝效果}
+  \label{fig:swast-bidirectional}
+\end{figure}
+
+\textbf{剪枝提升核心子集质量。}对比SWaST协同优化前后选出的核心子集中的噪声样本比例，SWaST-cut将噪声比例降低了10.62\%。% [VERIFY]
+这表明剪枝后的紧凑模型确实降低了特征空间的有效维度，帮助核心子集选择更准确地识别有价值的样本。
+
+\textbf{核心子集提升剪枝效果。}对比在全数据与精选核心子集上训练时的剪枝后准确率，精选数据减少了模型的过拟合倾向，使得剪枝后的模型泛化性能更好。
+
+
+\section{消融实验}
+
+\subsection{核心子集质量分析}
+
+在包含已知噪声标签的数据集上，定量评估SWaST选出的核心子集与独立核心子集选择的质量差异。协同优化显著减少了噪声样本的入选比例。% [VERIFY: 具体数字]
+通过损失分布图可以定性观察到：剪枝帮助模型在损失空间中更清晰地区分干净样本和噪声样本（噪声样本的损失值更高），从而使后续的核心子集选择更加精准。
+
+\subsection{过拟合缓解分析}
+
+对比密集模型在小核心子集上训练时的训练-验证损失差距（gap）与SWaST的对应差距。SWaST中的剪枝操作相当于隐式正则化\cite{hoefler2021sparsity}——通过减少模型容量，自然缓解了在小数据集上的过拟合问题。% [VERIFY: 过拟合对比图]
+
+\subsection{噪声鲁棒性分析}
+
+在人为添加不同比例噪声标签的数据集上，对比SWaST-cut与纯剪枝的准确率。表~\ref{tab:swast-noise}展示了结果。
+
+% [表4-3: 不同噪声比例下CIFAR-10上各方法的准确率对比]
+\begin{table}[htb]
+  \centering
+  \caption{不同噪声比例下CIFAR-10上各方法的准确率对比}
+  \label{tab:swast-noise}
+  \fbox{\parbox{0.8\textwidth}{\centering\vspace{1.5cm}
+    \textbf{占位表：对应原论文Table 3}\\[0.5em]
+    % [VERIFY: 噪声实验结果]
+  \vspace{1.5cm}}}
+\end{table}
+
+% [图4-6: 噪声鲁棒性]
+\begin{figure}[htb]
+  \centering
+  % \includegraphics[width=0.8\textwidth]{figures/swast-noise.pdf}
+  \fbox{\parbox{0.8\textwidth}{\centering\vspace{2cm}
+    \textbf{占位图：噪声鲁棒性}\\[0.5em]
+    (a) 不同剪枝率下SWaST-cut与纯剪枝的准确率；(b) FLOPs对比\\
+    对应原论文Fig.6，需手绘
+  \vspace{2cm}}}
+  \caption{噪声鲁棒性分析——SWaST在高噪声场景下的优势}
+  \label{fig:swast-noise}
+\end{figure}
+
+SWaST通过核心子集选择自动过滤噪声样本，在高噪声场景下优势更加明显。% [VERIFY: 噪声实验结果]
+这一结果进一步印证了数据选择与模型剪枝之间的协同效应：核心子集选择为剪枝提供了更干净的训练信号，而剪枝反过来帮助核心子集选择更准确地识别噪声。
+
+
+\section{讨论：协同效应还是比例平衡？}
+
+SWaST的效果是否仅仅来自将参数量与数据量的比例调整到更接近Scaling Laws\cite{kaplan2020scaling, hoffmann2022training}所预测的最优值？如果是纯粹的比例效应，那么静态地选择合适的核心子集大小和剪枝率就足够了，无需动态交替。
+
+本文对此给出了否定的回答。SWaST的交替机制不仅调整了模型与数据的比例，更重要的是实现了质量上的迭代净化：每轮剪枝改变了模型的有效表示空间，从而改变了哪些样本是"冗余"的判断；每轮核心子集更新提供了更干净的训练信号，从而改变了哪些权重是"多余"的评估。这种动态互利超越了静态比例调整。
+
+实证支持来自对照实验：在相同的最终剪枝率和核心子集大小下，SWaST的交替方式优于一次性剪枝+一次性选择（流水线方式）。如果SWaST的优势仅来自比例平衡，流水线方式应达到相同效果。因此，比例平衡是协同效应的必要条件之一，但SWaST的动态交替提供了超越比例平衡的额外增益。
+
+
+\section{章节小结}
+
+本章首次透明地分析了数据冗余与参数冗余的双向耦合关系：冗余样本阻碍有效剪枝，冗余参数干��数据选择。基于这一分析，提出SWaST框架通过交替执行权重剪枝与核心子集选择建立协同效应。SWaST识别并解决了同步优化中独有的"双重损失"挑战，通过状态记录与状态约束训练机制防止不可逆退化。在CIFAR-10、CIFAR-100、TinyImageNet和ImageNet-1K四个数据集以及ResNet-18和ResNet-101两种架构上，SWaST实现了最高17.83\%的准确率提升，同时削减10\%至90\%的FLOPs。% [VERIFY]
+
+前两章聚焦训练侧的数据选择：第三章优化"选什么数据训练"，本章优化"数据选择与模型压缩如何协同"。二者的共同前提是训练阶段的资源约束——计算预算或模型容量。模型训练和压缩完成后部署到真实环境中，面临另一维度的挑战：推理时的输入数据可能不再属于训练时所选定的数据分布。第五章将数据选择的视角从训练延伸至推理——如何判断输入是否处于模型的有效数据域内？

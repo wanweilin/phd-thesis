@@ -1,0 +1,129 @@
+% fduthesis: 复旦大学博士学位论文
+% 使用 XeLaTeX 编译
+
+\documentclass[type=doctor]{fduthesis}
+
+\fdusetup{
+  style = {
+    footnote-style = xits,
+    bib-backend = bibtex,
+    bib-resource = {main.bib},
+  },
+  info = {
+    title = {数据选择驱动的深度学习效率与可靠性优化研究},
+    title* = {Data Selection Driven Optimization of \\
+              Deep Learning Efficiency and Reliability},
+    author = {万玮霖},  % TODO: 确认姓名
+    supervisor = {TODO \quad 教授},  % TODO: 填写导师信息
+    major = {计算机科学与技术},  % TODO: 确认专业
+    degree = academic,
+    department = {计算机科学技术学院},  % TODO: 确认院系
+    student-id = {TODO},  % TODO: 填写学号
+    keywords = {数据选择, 深度学习, 核心子集选择, 模型剪枝, 分布外检测},
+    keywords* = {Data Selection, Deep Learning, Coreset Selection, Model Pruning, Out-of-Distribution Detection},
+    clc = {TP181},  % TODO: 确认分类号
+  }
+}
+
+% ======== 宏包 ========
+\usepackage{amsmath, amssymb, amsfonts}
+\usepackage{bm}           % 粗体数学符号
+\usepackage{booktabs}     % 三线表
+\usepackage{multirow}     % 合并行
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{subcaption}   % 子图
+
+% ======== 自定义命令 ========
+% 通用
+\newcommand{\btheta}{\bm{\theta}}
+\newcommand{\bm}[1]{\boldsymbol{#1}}
+
+% CADS 专用
+\newcommand{\Lval}{\mathcal{L}_{\text{val}}}
+\newcommand{\Ltrn}{\mathcal{L}_{\text{trn}}}
+\newcommand{\thetaC}{\btheta_C(\mathbf{m})}
+
+% SWaST 专用
+\newcommand{\Lce}{\mathcal{L}_{\text{CE}}}
+\newcommand{\Lsp}{\mathcal{L}_{\text{SP}}}
+\newcommand{\Ltotal}{\mathcal{L}_{\text{total}}}
+
+% NAP 专用
+\newcommand{\SNAP}{S_{\text{NAP}}}
+\newcommand{\SNAPformer}{S_{\text{NAP}}^{\text{Former}}}
+
+\begin{document}
+
+% ======== 前置部分 ========
+\frontmatter
+
+\tableofcontents
+
+\begin{abstract}
+深度学习的突破性进展高度依赖大规模高质量数据，但数据规模增长带来的计算成本攀升、标注资源稀缺和数据质量参差等问题日益严峻。数据选择——在深度学习的不同阶段，根据特定目标从候选数据中识别和利用最相关样本的过程——是应对这些挑战的核心方法论。然而，现有研究大多将数据选择作为孤立的优化问题，忽视了选择策略与计算资源、模型容量、推理时分布偏移等关键因素之间的深层交互。
+
+本文围绕"深度学习全流程数据选择"这一主线，从阶段视角（训练$\to$推理）和交互变量视角（计算资源$\to$模型容量$\to$分布偏移）两个互补维度出发，系统研究数据选择与上述关键因素的交互，提出三项工作：
+
+针对训练阶段数据选择与计算资源约束的交互，提出计算预算感知的数据选择框架CADS。CADS首次将计算预算作为双层优化中的显式约束，通过概率化重参数化的策略梯度绕过内层非收敛的困难，并通过惩罚松弛与一维损失近似将双层优化转化为高效的单层求解。CADS揭示了一个被广泛忽视的现象：最优数据子集是计算预算的函数——低预算偏好简单干净的数据，高预算受益于多样化的数据。在视觉分类和语言模型微调任务上，CADS相较基线方法最高提升14.42\%。该工作发表于NeurIPS 2025。% [VERIFY]
+
+针对训练阶段数据选择与模型容量约束的交互，提出数据选择与权重剪枝的协同优化框架SWaST。SWaST首次透明地分析了数据冗余与参数冗余的双向耦合关系——冗余样本阻碍有效剪枝，冗余参数干扰数据选择——并通过交替执行权重剪枝与核心子集选择建立协同效应。SWaST识别并解决了同步优化中独有的"双重损失"问题，通过状态保护机制防止不可逆退化。在四个基准数据集和两种网络架构上，SWaST实现了最高17.83\%的准确率提升，同时削减10\%至90\%的浮点运算量。该工作发表于AAAI 2026。% [VERIFY]
+
+针对推理阶段数据选择与分布偏移的交互，提出基于神经激活先验的分布外检测方法NAP。NAP发现了一个被现有方法忽视的检测信号：在全局池化前的特征图中，分布内样本在各通道内呈现尖锐的空间激活模式，而分布外样本的激活更为分散。基于这一先验，NAP设计了即插即用的评分函数，同时适用于CNN和Vision Transformer架构，并可与现有方法通过加权几何均值实现正交互补。在CIFAR和ImageNet基准上，NAP与多种基线方法组合后FPR95最高降低66.03\%。% [VERIFY]
+
+三项工作从训练侧延伸到推理侧，共同揭示了一个方法论启示：数据选择的最优策略并非孤立决定的，而是取决于其所处的约束环境——计算资源约束改变最优训练数据的组成，模型容量约束与数据冗余需要协同而非独立处理，推理时分布偏移要求对数据有效性做在线判断。
+\end{abstract}
+
+\begin{abstract*}
+The breakthroughs in deep learning are highly dependent on large-scale, high-quality data, yet the growth of data scale brings increasingly severe challenges including escalating computational costs, scarcity of annotation resources, and inconsistent data quality. Data selection---the process of identifying and utilizing the most relevant samples from candidate data at different stages of deep learning---is a core methodology for addressing these challenges. However, existing research largely treats data selection as an isolated optimization problem, overlooking the deep interactions between selection strategies and key factors such as computational resources, model capacity, and inference-time distribution shift.
+
+This thesis centers on ``data selection throughout the deep learning pipeline'' and systematically studies the interactions between data selection and the aforementioned key factors from two complementary perspectives: the stage perspective (training $\to$ inference) and the interaction variable perspective (computational resources $\to$ model capacity $\to$ distribution shift). Three contributions are presented:
+
+For the interaction between data selection and computational resource constraints during training, we propose CADS (Computation-Aware Data Selection), a framework that, for the first time, incorporates the computational budget as an explicit constraint in bilevel optimization for data selection. CADS bypasses the difficulty of inner-level non-convergence through probabilistic reparameterization with REINFORCE policy gradients, and further transforms the bilevel optimization into an efficient single-level problem via penalty relaxation and one-dimensional loss approximation. CADS reveals a widely overlooked phenomenon: the optimal data subset is a function of the computational budget---low budgets favor simple, clean data while high budgets benefit from diverse data. On visual classification and language model fine-tuning tasks, CADS achieves up to 14.42\% improvement over baseline methods. This work was published at NeurIPS 2025.
+
+For the interaction between data selection and model capacity constraints during training, we propose SWaST (Simultaneous Weight and Sample Tailoring), a framework for synergistic optimization of data selection and weight pruning. SWaST is the first to transparently analyze the bidirectional coupling between data redundancy and parameter redundancy---redundant samples hinder effective pruning, while redundant parameters impair data selection---and establishes synergy through alternating weight pruning and coreset selection. SWaST identifies and addresses the unique ``Critical Double-Loss'' problem in simultaneous optimization through a state protection mechanism that prevents irreversible degradation. On four benchmark datasets with two network architectures, SWaST achieves up to 17.83\% accuracy improvement while reducing 10\% to 90\% of FLOPs. This work was published at AAAI 2026.
+
+For the interaction between data selection and distribution shift during inference, we propose NAP (Neural Activation Prior), an out-of-distribution (OOD) detection method based on a previously overlooked detection signal: in the feature maps before global average pooling, in-distribution samples exhibit sharp spatial activation patterns within each channel, while OOD samples show more dispersed activations. Based on this prior, NAP designs a plug-and-play scoring function applicable to both CNNs and Vision Transformers, achieving orthogonal complementarity with existing methods through weighted geometric mean combination. On CIFAR and ImageNet benchmarks, NAP reduces FPR95 by up to 66.03\% when combined with various baseline methods.
+
+Together, the three works span from training to inference and reveal a methodological insight: the optimal data selection strategy is not determined in isolation, but depends on its operating constraints---computational resource constraints alter the composition of optimal training data, model capacity constraints and data redundancy require synergistic rather than independent treatment, and inference-time distribution shift demands online assessment of data validity.
+\end{abstract*}
+
+% ���号��
+\begin{notation}[lp{10cm}]
+  $\btheta$                   & 模型参数 \\
+  $\mathcal{D}$               & 完整训练数据集 \\
+  $\mathcal{L}$               & 损失函数 \\
+  $f$                         & 神经网络模型 \\
+  $x, y$                      & 输入样本、标签 \\
+  $\mathbf{m}$                & 二值数据选择向量（样本掩码） \\
+  $\mathbf{s}$                & 可学习的采样分布参数 \\
+  $C$                         & 计算预算（第三章）/ 通道数以$N_c$表示（第五章） \\
+  $\hat{\mathcal{D}}$         & 核心子集（coreset） \\
+  $\mathcal{R}$               & 核心子集选择的epoch间隔 \\
+  $\lambda$                   & 状态保护损失权重 \\
+  $\mathbf{A}$                & 全局池化层前的激活张量 \\
+  $S_{\text{NAP}}$            & NAP评分函数 \\
+\end{notation}
+
+% ======== 主体部分 ========
+\mainmatter
+
+\include{ch1-intro}
+\include{ch2-related-work}
+\include{ch3-cads}
+\include{ch4-swast}
+\include{ch5-nap}
+\include{ch6-conclusion}
+
+% ======== 后置部分 ========
+\backmatter
+
+\printbibliography
+
+\begin{acknowledgements}
+  % TODO: 致谢
+  致谢内容。
+\end{acknowledgements}
+
+\end{document}

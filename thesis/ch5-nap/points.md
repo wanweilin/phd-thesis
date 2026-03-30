@@ -13,8 +13,10 @@
 - 与训练时数据选择的呼应：训练选择界定有效域的边界，推理检测守护这一边界。从"数据选择"的统一视角看，二者是同一问题在不同阶段的体现。
 
 **段落3 — 现有方法的局限与本章目标**
+- [图5-1: 全局池化导致通道内激活分布信息丢失的示意——ID 和 OOD 样本的激活图对比（对应原论文 Fig.1）。需手绘。]
 - 现有后处理 OOD 检测方法利用的信号主要来自：最终输出层（MSP、Energy）或全局池化后的中间特征（Mahalanobis、KNN、ReAct、DICE、ASH）。
 - 共同的信息盲区：全局平均池化将 $C \times H \times W$ 压缩为 $C$ 维，丢失了通道内的空间激活分布信息。
+- [图5-2: NAP 评分的区分效果——(a) Energy Score 分布；(b) NAP Score 分布；(c) Energy × NAP 组合分布，对比 ID 与 OOD（对应原论文 Fig.2）。需手绘。]
 - 本章提出神经激活先验（Neural Activation Prior, NAP）：利用这一被忽视的池化前通道内信息，提供与现有方法正交的新检测信号。
 
 ---
@@ -36,6 +38,7 @@
 
 **段落1 — 核心观察**
 - 观察对象：全连接层前的特征图，形状为 $C \times H \times W$（$C$ 个通道，每个通道是 $H \times W$ 的空间特征图）。
+- [图5-3: NAP 在分类神经网络中的关注区域示意——(a) CNN 中的 NAP 位置；(b) Transformer 中的 NAP 位置（对应原论文 Fig.3）。需手绘。]
 - 核心发现：对于 ID 样本，每个通道内少量空间位置具有显著高于均值的激活值（尖锐激活模式）；对于 OOD 样本，通道内的激活更均匀分散，缺乏尖锐响应。
 - 量化：定义两个逐通道统计量——$\text{Max}(A_j) = \max_{k,l} A_{jkl}$（通道内最大激活）和 $\text{Mean}(A_j) = \frac{1}{HW}\sum_{k,l} A_{jkl}$（通道内均值激活）。ID 样本的 Max/Mean 比值显著高于 OOD 样本。
 
@@ -47,6 +50,7 @@
 **段落3 — 为何选择倒数第二层**
 - 浅层特征（conv1、早期模块）捕获低级特征（边缘、颜色），ID 和 OOD 共享这些基础特征，区分度低。
 - 深层特征（全连接层前）捕获高级语义特征，对训练数据分布高度特异，ID/OOD 差异最大。
+- [图5-4: DenseNet 不同层的激活分布对比——ID 数据（CIFAR-10）与 OOD 数据（Places365）在各层的 Max 与 Mean 激活分布（对应原论文 Fig.4）。需手绘。]
 - 实证验证：NAP 在不同层上的区分度随深度递增。[VERIFY: 层级分析实验]
 
 **段落4 — 向 Transformer 的扩展**
@@ -100,16 +104,19 @@
 - NAP 组合变体：NAP-M、NAP-E、NAP-R、NAP-D、NAP-A、NAP-K。[VERIFY: 完整设置]
 
 **段落2 — CIFAR 基准结果**
+- [表5-1: CIFAR-10 和 CIFAR-100 基准上 NAP 与各后处理方法的组合效果（对应原论文 Table 1）。]
 - CIFAR-10：NAP-K 将 FPR95 从 15.05% 降至 7.79%；NAP-E 实现最大相对降幅 66.03%。[VERIFY: 详细数据]
 - CIFAR-100：NAP-R 将 FPR95 从 41.40% 降至 25.71%，最大相对降幅 58.71%。[VERIFY]
 - 关键观察：NAP 的提升在不同 OOD 数据集上不均匀，对 Textures 等纹理类 OOD 改善最大（这类 OOD 在池化后特征上与 ID 难以区分，但在通道内激活模式上差异显著）。
 
 **段落3 — ImageNet 基准结果**
+- [表5-2: ImageNet-1K 基准上 NAP 与各方法在四个 OOD 数据集上的结果（对应原论文 Table 2）。]
 - 大规模验证：ImageNet-1K 作为 ID，四个 OOD 数据集。
 - NAP-A（与 ASH 组合）将平均 FPR95 从 35.66% 降至 29.86%。[VERIFY: 详细数据]
 - 在 Textures 和 iNaturalist 上改善最为显著，与 CIFAR 上的观察一致。
 
 **段落4 — Transformer 实验**
+- [表5-3: ViT-B/16 上 NAP 与 Energy、MSP 基线的 OOD 检测结果（对应原论文 Table 3）。]
 - ViT-B/16 上的结果：NAP-M 将 FPR95 从 61.72%（MSP）降至 54.40%。[VERIFY]
 - 验证了 NAP 思想（激活集中度作为 ID/OOD 信号）从 CNN 到 Transformer 的迁移性。
 

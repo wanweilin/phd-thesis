@@ -1,0 +1,127 @@
+\chapter{相关工作}
+
+本章围绕数据选择这一核心主题，从四个方面综述与本文研究密切相关的��有工作。第~\ref{sec:training-data-selection}节综述训练数据选择方法，涵盖核心子集选择、大模型微调中的数据选择以及相关概念（数据集蒸馏与课程学习），为第三、四章提供数据侧背景。第~\ref{sec:model-redundancy}节综述模型冗余与效率优化方法，聚焦结构化与非结构化剪枝以及稀疏训练，为第四章提供模型侧背景。第~\ref{sec:optimization-methods}节综述数据选择中常用的双层优化方法论，为第三章提供方法论工具。第~\ref{sec:ood-detection}节综述分布外检测方法，为第五章提供推理侧背景。本章的组织并非对四个独立领域的简单罗列，而是始终围绕"数据选择与关键因素的交互"这一视角进行串联。
+
+需要指出的是，上述四个领域各自已有丰富的研究积累，但一个共性问题贯穿其中：现有工作倾向于将数据选择作为独立决策进行研究，较少关注数据选择与计算预算、模型容量、推理时分布偏移等因素之间的交互影响。本章在综述各领域时，会在每节末尾明确指出这一不足，为后续三章的研究动机提供铺垫。
+
+
+\section{训练数据选择方法}\label{sec:training-data-selection}
+
+\subsection{核心子集选择}
+
+核心子集选择（Coreset Selection）旨在从完整训练集中识别出具有代表性的子集，使得在该子集上训练的模型能够尽可能逼近在全量数据上训练的性能\cite{albalak2024survey}。现有方法大致可分为三类：基于优化的方法、基于训练动态的启发式方法和基于几何距离的方法。
+
+\textbf{基于优化的方法}通过显式优化目标来选择子集。子模函数最大化方法利用子模函数（如Facility Location函数）的近似最优性保证，在多项式时间内选出高质量子集\cite{wei2015submodularity, mirzasoleiman2016fast}。梯度匹配方法（如GradMatch\cite{killamsetty2021grad}）通过最小化子集梯度与全集梯度之间的差异来选择样本，使得在子集上的梯度更新尽可能模拟全集训练。双层优化方法（如PBCS\cite{zhou2022probabilistic}、GLISTER\cite{killamsetty2021glister}）将数据选择建模为外层问题，以验证集性能为目标优化子集组成，内层在所选子集上训练模型。这类方法通常具有较好的理论性质，但计算开销较高。
+
+\textbf{基于训练动态的启发式方法}利用模型训练过程中产生的信号来估计样本重要性，无需额外的优化过程。Toneva等人\cite{toneva2018empirical}提出记录训练过程中每个样本被"遗忘"的次数（Forgetting Events），发现被反复遗忘的样本对模型学习至关重要。Paul等人\cite{paul2021deep}提出EL2N评分，利用训练早期的误差范数评估样本难度，以及GraNd评分利用梯度范数进行类似估计。Pruthi等人\cite{pruthi2020estimating}通过追踪梯度下降轨迹来估计训练数据的影响。这些方法计算高效，但缺乏选择质量的理论保障。
+
+\textbf{基于几何距离的方法}在特征空间中根据样本间的距离关系选择代表性样本。K-Center-Greedy\cite{sener2018active}选择使得任何未选样本到最近已选样本的最大距离最小的子集。Moderate Coreset\cite{xia2022moderate}选择距离类中心适中的样本，避免过于简单或过于困难的极端样本。近年来，基于数据模型（Datamodels）的方法\cite{ilyas2022datamodels, engstrom2024dsdm}和基于最优传输的方法\cite{xiao2024feature}进一步丰富了这一领域。
+
+\subsection{大模型微调中的数据选择}
+
+随着大规模语言模型的兴起，微调阶段的数据选择面临新的挑战\cite{albalak2024survey}。与传统核心子集选择相比，LLM微调场景具有三个显著特殊性：数据来源多样（人工标注、模型生成、开源数据集），质量参差不齐，且单次训练成本极高\cite{rae2021scaling}，使得数据选择的经济价值尤为突出。
+
+在这一背景下，一系列高效的数据选择方法应运而生。Zhou等人\cite{zhou2023lima}通过LIMA实验证明，仅需1000条精心筛选的高质量指令数据即可有效微调LLM，挑战了"数据越多越好"的传统认知。在自动化筛选方面，Chen等人\cite{chen2023alpagasus}提出利用模型自身对数据质量进行评估和过滤；Cao等人\cite{cao2023instruction}提出基于自然语言指标的数据挖掘方法；Lu等人\cite{lu2023instag}通过语义意图标签实现数据分类与筛选。Liu等人\cite{liu2023what}提出DEITA框架，综合数据质量、复杂度和多样性三个维度进行统一评估。近期工作还探索了基于梯度的技术路线，包括聚类核心子集选择\cite{zhang2024tagcos}和基于图的方法\cite{zhao2025beyond}，以及利用小模型训练轨迹指导大模型数据选择\cite{yang2024smalltolarge}和基于稀疏自编码器的多样性驱动选择\cite{yang2025diversity}等新思路。
+
+与传统核心子集选择相比，LLM数据选择更依赖启发式质量指标而非梯度信息，且常需处理来源级（source-level）的数据混合配比问题——即确定不同来源数据的最优混合比例，而非逐样本选择。
+
+\subsection{数据集蒸馏与课程学习}
+
+除核心子集选择外，数据效率领域还有两个相关但不同的研究方向：数据集蒸馏和课程学习。
+
+数据集蒸馏（Dataset Distillation）\cite{wang2018dataset}通过优化生成少量合成样本来压缩数据集的信息内容。代表性方法包括基于梯度匹配的方法\cite{cazenavette2022dataset}和基于可寻址记忆的方法\cite{deng2022remember}。与核心子集选择的"选"相对，蒸馏是"造"新数据\cite{yu2023dataset}。蒸馏方法的优点在于可实现极致的数据压缩率，但合成样本缺乏可解释性，且生成过程本身计算昂贵，在异构大规模数据上的扩展性有限。
+
+课程学习（Curriculum Learning）\cite{bengio2009curriculum}按照从易到难的顺序组织训练样本，关注的是训练顺序而非子集选择\cite{hacohen2019power, soviany2021curriculum}。与核心子集选择有交叉之处——二者都涉及样本重要性评估——但目标不同：课程学习优化的是"以什么顺序使用所有数据"，而核心子集选择优化的是"使用哪些数据"。相关地，重要性采样\cite{alain2015variance, katharopoulos2018not, loshchilov2015online}和自适应重加权方法通过优先处理对模型改进贡献最大的数据点来提升训练效率。
+
+本文聚焦于从现有数据中选择子集的问题，数据集蒸馏和课程学习不是本文的直接研究对象，但它们为理解数据效率的全景提供了有价值的参照。
+
+\subsection{小结：忽视计算预算的交互}
+
+上述所有训练数据选择方法在选择数据时，隐含假设训练会运行到收敛或至少运行足够长的时间，即最优子集与实际可用的计算预算无关。然而，实际应用中的计算预算差异巨大——从小规模实验的数千步到大规模预训练的数百万步。近期研究\cite{diddee2024chasing, shen2024rethinking, xia2024rethinking}揭示了一个令人意外的现象：精心设计的数据选择策略在某些计算预算下甚至不如随机选择。Yin等人\cite{yin2024compute}进一步证明，当计算预算被显式纳入考量时，此前有效的数据选择方法往往不再最优。这些发现暗示最优数据子集确实依赖于计算预算，而非一个与预算无关的固定集合。这一不足正是第三章CADS要解决的核心问题：将计算预算作为数据选择的显式变量。
+
+
+\section{模型冗余与效率优化}\label{sec:model-redundancy}
+
+\subsection{结构化剪枝}
+
+结构化剪枝（Structured Pruning）通过移除整个滤波器或通道来压缩模型\cite{he2018soft, jiang2022channel}，其产生的稀疏模型可直接在标准硬件上加速推理，无需专用稀疏计算库的支持。
+
+在剪枝准则方面，研究者们提出了多种评估滤波器重要性的方法。基于范数的方法\cite{han2015learning}以滤波器权重的L1或L2范数作为重要性度量，范数较小的滤波器被认为对输出贡献较小，可优先移除。基于梯度敏感度的方法利用Taylor展开近似评估移除某个滤波器对损失函数的影响\cite{lecun1989optimal, hassibi1992second}。此外，还有基于特征图重建误差的方法\cite{he2018soft}，以及基于图卷积网络的通道剪枝方法\cite{jiang2022channel}和自监督掩码学习方法\cite{elkerdawy2022fire}等。
+
+\subsection{非结构化剪枝与稀疏训练}
+
+非结构化剪枝（Unstructured Pruning）在权重级别将单个参数置零\cite{han2015learning, han2016deep}，可达到更高的稀疏率，但产生的不规则稀疏模式需要专用硬件或软件库的支持才能实现实际加速。
+
+经典方法中，基于幅度的剪枝（Magnitude Pruning）\cite{han2015learning}是最直观的方案，直接移除绝对值最小的权重。Frankle和Carlin\cite{frankle2018lottery}提出的彩票假说（Lottery Ticket Hypothesis）揭示了密集网络中存在稀疏子网络，这些子网络从初始化开始独立训练即可达到与密集网络相当的性能。Lee等人\cite{lee2018snip}提出SNIP，利用连接敏感度在训练前一次性确定剪枝掩码。在理论方面，近年来的研究将剪枝与优化理论建立了联系\cite{grosse2016kronecker, zhou2021effective, louizos2017learning, qian2021probabilistic}，为剪枝方法提供了更坚实的理论基础。
+
+稀疏训练（Sparse Training）是一类在训练过程中动态调整稀疏模式的方法。Evci等人\cite{evci2020rigging}提出的RigL方法允许稀疏结构在训练过程中通过"生长"（激活新连接）和"修剪"（移除现有连接）不断演化，而非在训练结束后一次性确定。这种动态调整机制使得稀疏模式能够更好地适应训练过程中模型状态的变化。本文第四章采用RigL作为在线剪枝方法，���是因为其动态特性与交替优化框架天然兼容。
+
+\subsection{小结：数据侧与模型侧"选择"的割裂}
+
+从"冗余消除"的统一视角审视，核心子集选择和模型剪枝本质上是对训练流程中不同维度冗余的"选择"：前者消除数据冗余，识别对训练贡献小的样本；后者消除参数冗余，识别对推理贡献小的权重。值得注意的是，在经典机器学习中，特征筛选（类比于权重剪枝）与样本筛选（类比于核心子集选择）的联合优化已有理论框架\cite{shibagaki2016simultaneous, zhang2017scaling}，经验表明特征筛选可增强样本重要性估计，反之亦然。
+
+然而，在深度学习中，现有工作将这两类选择完全独立进行：先做数据选择再在选出的子集上训练完整模型，或先训练完整模型再做剪枝。这种流水线式处理隐含假设数据冗余与参数冗余相互独立，忽视了二者之间的潜在耦合。这一不足正是第四章SWaST要解决的核心问题：揭示数据冗余与参数冗余的双向耦合关系，提出协同优化方案。
+
+
+\section{数据选择中的优化方法}\label{sec:optimization-methods}
+
+\subsection{双层优化的基本框架}
+
+双层优化（Bilevel Optimization）是一类具有层次结构的优化问题：外层（上层）目标优化上层变量，内层（下层）目标求解下层变量，且内层的最优解依赖于外层的决策。这种嵌套结构天然适合建模机器学习中的多层次决策问题。
+
+在机器学习中，双层优化的典型应用包括：超参数优化\cite{franceschi2017forward, franceschi2018bilevel, lorraine2020optimizing}，其中外层目标为验证集损失，内层目标为训练集损失，通过联合优化实现模型参数与超参数的协同调优；神经架构搜索，如DARTS\cite{liu2018darts}将架构参数设为外层变量、网络权重设为内层变量，实现高效的架构发现；以及元学习，其中外层优化跨任务的泛化能力，内层完成任务内的快速适应。
+
+\subsection{主要求解策略}
+
+双层优化的核心难点在于计算外层目标关于外层变量的梯度（即超梯度），因为外层目标通过内层最优解间接依赖于外层变量。现有求解策略可分为四类。
+
+\textbf{基于隐式微分的方法}\cite{domke2012generic, grazzi2020iteration, pedregosa2016hyperparameter}利用内层最优性��件（如KKT条件），通过隐式函数定理计算超梯度。这类方法需要计算Hessian向量积，计算代价高且需要内层求解到最优。
+
+\textbf{基于迭代微分的方法}\cite{maclaurin2015gradient, shaban2019truncated}对内层训练过程做截断反向传播（truncated backpropagation），将超梯度表示为训练轨迹上的梯度累积。计算开销与截断步数成正比，在长训练过程中不可行。
+
+\textbf{基于有限差分的方法}\cite{sow2021convergence, yang2023achieving}用参数扰动估计梯度，避免了显式的二阶微分，但引入的方差较大，收敛速度受限。
+
+\textbf{基于惩罚的一阶方法}\cite{chen2023near, kwon2023fully, ye2022bome}是近年来最重要的进展之一。这类方法将内层最优性条件转化为外层目标的惩罚项，消除双层嵌套结构，使得整个问题可以仅用标准一阶梯度求解。这一进展使双层优化算法得以应用于日益大规模的问题\cite{pan2024scalebio}。
+
+\subsection{小结：双层优化在数据选择中的应用与不足}
+
+数据选择问题天然适合双层优化建模：外层优化数据选择策略（使验证集性能最优），内层在选定的数据子集上训练模型\cite{zhou2022probabilistic, killamsetty2021glister, borsos2020coresets}。在这一框架下，数据重加权、核心子集选择以及大规模语言模型的数据配比\cite{pan2024scalebio}等问题都可以统一建模。
+
+然而，现有的双层优化数据选择方法存在一个共性假设：它们要么假设内层训练到收敛（从而可以利用隐式函数定理），要么不显式考虑计算预算约束。当内层因预算限制无法收敛时——这在实际���用中极为常见——标准双层优化的理论基础（如内层最优性条件）不再成立，基于隐式微分的超梯度计算也随之失效。这一不足直接引出第三章的工作：CADS通过惩罚松弛和一维损失近似来处理内层非收敛的情况，将计算预算显式纳入数据选择的优化框架。
+
+
+\section{分布外检测}\label{sec:ood-detection}
+
+\subsection{问题定义与方法分类}
+
+分布外检测（Out-of-Distribution Detection, OOD Detection）\cite{yang2021generalized_survey}的目标是：给定在分布内（In-Distribution, ID）数据上训练的分类器$f$，设计评分函数$S(x; f)$，使得ID样本的得分系统性地高于（或低于）OOD样本的得分，从而通过阈值$\tau$实现二分判别——$S(x) \geq \tau$则接受输入，否则拒绝。
+
+现有OOD检测方法可从方法论角度分为三大类\cite{yang2021generalized_survey}：（1）基于分类器输出的方法，利用softmax概率\cite{hendrycks2016msp}、logits或能量函数\cite{liu2020energy}等网络输出信息；（2）基于密度估计的方法\cite{zong2018deep_densi, nalisnick2018deep_densi, zisselman2020deep_densi, kirichenko2020normalizing_densi}，在特征空间中显式建模ID数据的概率分布；（3）基于距离的方法\cite{lee2018maha_dist, sun2022knn, ming2022cider_dist}，计算测试���本与ID数据在特征空间中的距离。其中，基于分类器输出的方法通常表现最优\cite{yang2021generalized_survey}。
+
+本文聚焦后处理方法（post-hoc methods），即不修改模型训练过程、不需要OOD数据参与训练，仅在推理时利用已训练模型的输出设计评分函数的方法。这一约束具有重要的实际意义——在真实部署场景中，模型通常不允许因检测需求而重新训练。
+
+\subsection{基于输出层的后处理方法}
+
+最大Softmax概率（Maximum Softmax Probability, MSP）\cite{hendrycks2016msp}是OOD检测最基础的基线方法，它直接以模型输出的最大softmax概率作为ID置信度。MSP简单有效，但由于softmax函数的归一化特性，即使对OOD输入也可能产生较高的置信度，限制了其区分能力。
+
+能量评分（Energy Score）\cite{liu2020energy}用LogSumExp函数替代softmax归一化，将网络输出映射为一个标量能量值。Liu等人\cite{liu2020energy}从理论上证明能量评分与输入的对数似然相关，因此比MSP具有更强的理论支撑和实证表现。
+
+ODIN\cite{liang2018odin_confi}通过两个技术手段增强softmax概率的区分度：温度缩放（temperature scaling）降低softmax输出的尖锐程度，输入扰动（input perturbation）沿梯度方向微调输入以拉大ID与OOD的评分差距。此外，LINe\cite{ahn2023line}通过计算Shapley值减少神经元引入的噪声，GEN\cite{liu2023gen}探索了softmax方法的理论极限。
+
+这些方法的共同特点是均利用网络的最终输出（logits或softmax概率），依赖的信息来源较为单一。
+
+\subsection{基于中间特征的方法}
+
+为了利用比最终输出更丰富的中间表示，一系列方法将检测信号的来源扩展到网络的中间层特征。
+
+\textbf{特征激活操作方法}通过干预中间层的特征激活来改善OOD检测。ReAct\cite{sun2021react}观察到OOD数据倾向于在倒数第二层产生异常大的激活值，通过截断这些异常激活来抑制OOD样本的虚假高分。DICE\cite{sun2022dice}基于单元贡献度对全连接层权重进行稀疏化，提升OOD检测的灵敏度。ASH\cite{djurisic2022extremely}在特征层执行激活整形（activation shaping），通过选择性剪枝策略实现了优于DICE的检测效果。Yu等人\cite{yu2023block}通过选择特征范数区分度最优的网络块来提升检测性能。
+
+\textbf{特征空间距离方法}在特征空间中度量测试样本与ID数据之间的距离。马氏距离方法\cite{lee2018maha_dist}在各层特征空间中计算测试样本到类条件高斯分布中心的马氏距离，综合多层信息进行判断。K近邻方法（KNN）\cite{sun2022knn}直接利用测试样本与ID训练数据在特征空间中的K近邻距离作为OOD评分，无需假设特征服从特定分布。
+
+这些方法利用了比最终输出更丰富的中间表示信息，但一个值得注意的共同点是：大多数方法仍在全局平均池化（Global Average Pooling, GAP）之后操作——无论是特征激活操作还是距离计算，使用的都是池化后的$C$维特征向量。
+
+\subsection{小结：池化前信息的缺失}
+
+全局平均池化将$C \times H \times W$的特征图压缩为$C$维向量，这一操作在降低维度的同时，不可避免地丢失了每个通道内的空间激活分布信息。具体而言，池化后的通道特征值仅反映该通道的平均激活水平，无法区分"少量空间位置产生高激活"与"大量空间位置产生中等激活"这两种截然不同的激活模式。
+
+现有后处理方法——无论是基于输出层的MSP\cite{hendrycks2016msp}、Energy\cite{liu2020energy}，还是基于中间特征的ReAct\cite{sun2021react}、DICE\cite{sun2022dice}、ASH\cite{djurisic2022extremely}、KNN\cite{sun2022knn}——主要在池化后的特征上工作，未利用池化前通道内的激活分布模式。这一信息空白正是第五章NAP的切入点：NAP发现ID样本和OOD样本在池化前的通道内激活模式存在显著差异——ID样本倾向于在少量空间位置产生尖锐的高激活，而OOD样本的激活更为分散。这一"神经激活先验"可作为独立于现有方法的新检测信号，与现有方法实现正交互补。
