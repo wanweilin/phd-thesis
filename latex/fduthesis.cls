@@ -1263,10 +1263,10 @@
     degree   / content     = \__fdu_cover_degree:,
     title    / content     =
       \__fdu_fixed_width_center_box:nn
-        { 0.9 \textwidth } { \l__fdu_info_title_tl },
+        { 1.0 \textwidth } { \l__fdu_info_title_tl },
     title-en / content     =
       \__fdu_fixed_width_center_box:nn
-        { 0.9 \textwidth } { \l__fdu_info_title_en_tl },
+        { 1.0 \textwidth } { \l__fdu_info_title_en_tl },
     info     / content     = \__fdu_cover_info:,
     id       / format      = \zihao { -5 },
     type     / format      = \zihao {  2 },

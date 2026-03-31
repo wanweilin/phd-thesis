@@ -26,8 +26,7 @@
 }
 
 % ======== 宏包 ========
-\usepackage{amsmath, amssymb, amsfonts}
-\usepackage{bm}           % 粗体数学符号
+% 注意：fduthesis 已加载 amsmath + unicode-math，不要再加载 amssymb/amsfonts/bm
 \usepackage{booktabs}     % 三线表
 \usepackage{multirow}     % 合并行
 \usepackage{algorithm}
@@ -36,9 +35,8 @@
 \usepackage{subcaption}   % 子图
 
 % ======== 自定义命令 ========
-% 通用
-\newcommand{\btheta}{\bm{\theta}}
-\newcommand{\bm}[1]{\boldsymbol{#1}}
+% 通用（unicode-math 下用 \symbf 替代 \bm）
+\newcommand{\btheta}{\symbf{\theta}}
 
 % CADS 专用
 \newcommand{\Lval}{\mathcal{L}_{\text{val}}}
@@ -89,7 +87,7 @@ For the interaction between data selection and distribution shift during inferen
 Together, the three works span from training to inference and reveal a methodological insight: the optimal data selection strategy is not determined in isolation, but depends on its operating constraints---computational resource constraints alter the composition of optimal training data, model capacity constraints and data redundancy require synergistic rather than independent treatment, and inference-time distribution shift demands online assessment of data validity.
 \end{abstract*}
 
-% ���号��
+% 符号表
 \begin{notation}[lp{10cm}]
   $\btheta$                   & 模型参数 \\
   $\mathcal{D}$               & 完整训练数据集 \\
@@ -125,5 +123,33 @@ Together, the three works span from training to inference and reveal a methodolo
   % TODO: 致谢
   致谢内容。
 \end{acknowledgements}
+
+% ======== 攻读博士学位期间发表的论文 ========
+{
+\chapter*{攻读博士学位期间发表的论文}
+\addcontentsline{toc}{chapter}{攻读博士学位期间发表的论文}
+\markboth{攻读博士学位期间发表的论文}{攻读博士学位期间发表的论文}
+
+\noindent\textbf{会议论文}
+
+\begin{enumerate}
+  \item \underline{Weilin Wan}, Weizhong Zhang, Cheng Jin. Computational Budget Should Be Considered in Data Selection. \textit{Advances in Neural Information Processing Systems (NeurIPS)}, 2025.
+
+  \item \underline{Weilin Wan}, Fan Yi, Weizhong Zhang, Quan Zhou, Cheng Jin. Explore and Establish Synergistic Effects Between Weight Pruning and Coreset Selection in Neural Network Training. \textit{Proceedings of the AAAI Conference on Artificial Intelligence (AAAI)}, 2026.
+
+  \item Zhikang Xie, \underline{Weilin Wan}, Peizhu Gong, Weizhong Zhang, Cheng Jin. Advanced Black-Box Tuning of Large Language Models with Limited API Calls. \textit{Proceedings of the AAAI Conference on Artificial Intelligence (AAAI)}, 2026.
+
+  \item \underline{Weilin Wan}, Weizhong Zhang, Cheng Jin. Pose-Motion Video Anomaly Detection via Memory-Augmented Reconstruction and Conditional Variational Prediction. \textit{IEEE International Conference on Multimedia and Expo (ICME)}, 2023.
+\end{enumerate}
+
+\noindent\textbf{预印本}
+
+\begin{enumerate}
+  \setcounter{enumi}{4}
+  \item \underline{Weilin Wan}, Weizhong Zhang, Quan Zhou, Fan Yi, Cheng Jin. Out-of-Distribution Detection Using Neural Activation Prior. \textit{arXiv preprint}, 2024.
+
+  \item \underline{Weilin Wan}, Jingtao Han, Weizhong Zhang, Cheng Jin. Holistic Scaling Laws for Optimal Mixture-of-Experts Architecture Optimization. \textit{arXiv preprint}, 2026.
+\end{enumerate}
+}
 
 \end{document}

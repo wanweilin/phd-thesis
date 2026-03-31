@@ -108,13 +108,13 @@ SWaST框架面临一个独特的挑战：\textbf{双重损失（Critical Double-
 
 \textbf{状态记录（State Recording）。}每次执行核心子集选择后，记录当前模型在所选子集上的完整前向输出（logits）：
 \begin{equation}\label{eq:swast-recording}
-  \tilde{\mathcal{D}} = \{(\mathbf{x}_i, \mathbf{z}_i) : \mathbf{z}_i = f_{\btheta_{\text{pre}}}(\mathbf{x}_i), \, (\mathbf{x}_i, y_i) \in \hat{\mathcal{D}}\}
+  \tilde{\mathcal{D}} = \lbrace(\mathbf{x}_i, \mathbf{z}_i) : \mathbf{z}_i = f_{\btheta_{\text{pre}}}(\mathbf{x}_i), \, (\mathbf{x}_i, y_i) \in \hat{\mathcal{D}}\rbrace
 \end{equation}
 这些logits快照捕获了剪枝和数据选择之前模型的知识状态，作为后续训练的"安全锚点"。
 
 \textbf{状态约束训练（State-Constrained Training）。}在每个交替周期内的训练使用复合损失：
 \begin{equation}\label{eq:swast-loss}
-  \Ltotal = \Lce + \lambda \sum_{i} \mathrm{KL}(\mathrm{softmax}(\mathbf{z}_i) \| \mathrm{softmax}(f_\btheta(\mathbf{x}_i)))
+  \mathcal{L}_{\text{total}} = \mathcal{L}_{\text{CE}} + \lambda \sum_{i} \mathrm{KL}\bigl(\mathrm{softmax}(\mathbf{z}_i) \Vert \mathrm{softmax}(f_{\symbf{\theta}}(\mathbf{x}_i))\bigr)
 \end{equation}
 其中$\Lce$为标准交叉熵损失，KL散度项衡量当前模型输出与记录状态之间的偏差。
 
